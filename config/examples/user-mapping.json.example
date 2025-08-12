@@ -1,0 +1,133 @@
+{
+  "_comment": "SSH User Management Configuration - EXAMPLE",
+  "_documentation": "https://github.com/your-org/ssh-key-management/wiki",
+  "_usage": "Kopiere diese Datei nach ../user-mapping.json und passe sie an",
+  
+  "users": [
+    {
+      "_example": "Hauptadministrator mit vollem sudo-Zugriff",
+      "github_user": "your-github-username",
+      "local_user": "admin",
+      "full_name": "Main Administrator",
+      "sudo_access": "full",
+      "groups": ["sudo", "adm", "systemd-journal", "docker"]
+    },
+    
+    {
+      "_example": "Entwickler mit begrenzten sudo-Rechten",
+      "github_user": "dev-alice",
+      "local_user": "alice",
+      "full_name": "Alice Developer",
+      "sudo_access": "limited",
+      "sudo_commands": [
+        "/usr/bin/systemctl restart nginx",
+        "/usr/bin/systemctl reload nginx",
+        "/usr/bin/systemctl status *",
+        "/usr/bin/docker ps",
+        "/usr/bin/docker logs *",
+        "/usr/bin/docker restart *"
+      ],
+      "groups": ["docker", "www-data"]
+    },
+    
+    {
+      "_example": "DevOps mit erweiterten Rechten",
+      "github_user": "ops-bob",
+      "local_user": "bob",
+      "full_name": "Bob DevOps Engineer", 
+      "sudo_access": "limited",
+      "sudo_commands": [
+        "/usr/bin/systemctl *",
+        "/usr/bin/docker *",
+        "/usr/local/bin/deploy-*",
+        "/bin/chown www-data:www-data /var/www/*",
+        "/usr/bin/certbot *"
+      ],
+      "groups": ["docker", "www-data", "adm"]
+    },
+    
+    {
+      "_example": "Deployment-Service-Account",
+      "github_user": "deploy-bot",
+      "local_user": "deployer",
+      "full_name": "Automated Deployment Service",
+      "sudo_access": "limited",
+      "sudo_commands": [
+        "/usr/bin/systemctl restart myapp",
+        "/usr/bin/systemctl reload myapp",
+        "/usr/bin/systemctl status myapp",
+        "/usr/local/bin/deploy-production",
+        "/usr/local/bin/deploy-staging",
+        "/bin/chown -R www-data:www-data /var/www/html"
+      ],
+      "groups": ["docker", "www-data"]
+    },
+    
+    {
+      "_example": "Externer Contractor ohne sudo",
+      "github_user": "contractor-charlie",
+      "local_user": "charlie",
+      "full_name": "Charlie External Contractor",
+      "sudo_access": "none",
+      "groups": ["users"]
+    },
+    
+    {
+      "_example": "Monitoring-Account mit Log-Zugriff",
+      "github_user": "monitoring-service", 
+      "local_user": "monitoring",
+      "full_name": "Monitoring Service Account",
+      "sudo_access": "limited",
+      "sudo_commands": [
+        "/usr/bin/systemctl status *",
+        "/bin/ps aux",
+        "/usr/bin/tail -f /var/log/*",
+        "/usr/bin/journalctl *"
+      ],
+      "groups": ["adm", "systemd-journal"]
+    }
+  ],
+  
+  "config": {
+    "default_shell": "/bin/bash",
+    "default_group": "users",
+    "user_home_base": "/home",
+    "description": "SSH User Management Example Configuration"
+  },
+  
+  "_help": {
+    "sudo_access_levels": {
+      "full": "Kompletter sudo-Zugriff ohne Passwort",
+      "limited": "Nur angegebene Kommandos erlaubt",
+      "none": "Kein sudo-Zugriff"
+    },
+    
+    "common_groups": {
+      "sudo": "Sudo-Berechtigung (nur bei sudo_access: full nötig)",
+      "adm": "System-Logs lesen (/var/log/*)",
+      "systemd-journal": "Systemd-Journal lesen", 
+      "docker": "Docker-Daemon-Zugriff",
+      "www-data": "Webserver-Dateien verwalten",
+      "users": "Standard-Benutzergruppe"
+    },
+    
+    "sudo_command_examples": [
+      "/usr/bin/systemctl restart nginx",
+      "/usr/bin/systemctl reload apache2", 
+      "/usr/bin/systemctl status *",
+      "/usr/bin/docker *",
+      "/usr/local/bin/deploy-*",
+      "/bin/chown www-data:www-data /var/www/*",
+      "/usr/bin/tail -f /var/log/*",
+      "/usr/bin/certbot renew"
+    ],
+    
+    "setup_steps": [
+      "1. Kopiere diese Datei: cp user-mapping.json.example ../user-mapping.json",
+      "2. Ersetze Beispiel-Werte mit deinen GitHub-Benutzernamen",
+      "3. Passe sudo_commands an deine Anwendungen an",
+      "4. Teste mit: sudo /usr/local/bin/github-ssh-user-manager.sh",
+      "5. Aktiviere Timer: sudo systemctl start ssh-user-manager.timer"
+    ]
+  }
+}
