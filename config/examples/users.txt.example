@@ -1,0 +1,48 @@
+# SSH Key Management - User List Example
+# Kopiere diese Datei nach ../users.txt und passe sie an
+# 
+# Format: Ein GitHub-Benutzername pro Zeile
+# Kommentare beginnen mit #
+
+# Hauptadministratoren - haben bereits lokale Accounts
+admin-stefan
+admin-alice
+
+# Development Team - existierende Benutzer
+dev-bob
+dev-charlie
+dev-diana
+
+# DevOps Team - existierende Benutzer
+ops-eve
+ops-frank
+
+# Externe Contractor - temporäre Benutzer
+# contractor-grace
+# contractor-henry
+
+# Service-Accounts (falls als normale User angelegt)
+# deploy-bot
+# monitoring-user
+
+# === VERWENDUNG ===
+#
+# 1. Kopiere diese Datei: cp users.txt.example ../users.txt
+# 2. Bearbeite ../users.txt mit deinen GitHub-Benutzernamen
+# 3. Entferne # um Benutzer zu aktivieren
+# 4. Füge # hinzu um Benutzer zu deaktivieren
+#
+# === WICHTIG ===
+#
+# - Diese Variante funktioniert nur für EXISTIERENDE Benutzer
+# - Neue Benutzer müssen manuell angelegt werden ODER
+# - Verwende user-mapping.json für automatische Benutzer-Erstellung
+#
+# === BEISPIEL AKTIVIERUNG ===
+#
+# Vor:  # dev-bob
+# Nach: dev-bob
+#
+# === LOGS ===
+#
+# sudo journalctl -u ssh-key-manager.service -f
