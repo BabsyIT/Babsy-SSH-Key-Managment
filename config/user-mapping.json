@@ -1,0 +1,96 @@
+{
+  "_comment": "SSH User Management Configuration",
+  "_documentation": "https://github.com/your-org/ssh-key-management/wiki",
+  "_last_updated": "2025-08-12",
+  
+  "users": [
+    {
+      "_comment": "Hauptadministrator - Vollzugriff",
+      "github_user": "stefan-ffr",
+      "local_user": "stefan",
+      "full_name": "Stefan Friedrich",
+      "sudo_access": "full",
+      "groups": ["sudo", "adm", "systemd-journal", "docker"]
+    }
+  ],
+  
+  "_examples": {
+    "_comment": "Entferne den Unterstrich und kopiere in 'users' Array",
+    
+    "_limited_sudo_user": {
+      "github_user": "alice-dev", 
+      "local_user": "alice",
+      "full_name": "Alice Developer",
+      "sudo_access": "limited",
+      "sudo_commands": [
+        "/usr/bin/systemctl restart nginx",
+        "/usr/bin/systemctl reload apache2",
+        "/usr/bin/systemctl status *",
+        "/usr/bin/docker *"
+      ],
+      "groups": ["docker", "www-data"]
+    },
+    
+    "_full_admin_user": {
+      "github_user": "bob-admin",
+      "local_user": "bob", 
+      "full_name": "Bob Administrator",
+      "sudo_access": "full",
+      "groups": ["sudo", "adm", "systemd-journal"]
+    },
+    
+    "_deployment_user": {
+      "github_user": "deploy-bot",
+      "local_user": "deployer",
+      "full_name": "Automated Deployment",
+      "sudo_access": "limited",
+      "sudo_commands": [
+        "/usr/bin/systemctl restart myapp",
+        "/usr/bin/systemctl reload myapp",
+        "/usr/local/bin/deploy-*",
+        "/bin/chown www-data:www-data /var/www/*"
+      ],
+      "groups": ["docker", "www-data"]
+    },
+    
+    "_contractor_limited": {
+      "github_user": "john-contractor",
+      "local_user": "john",
+      "full_name": "John Contractor (Temporary Access)",
+      "sudo_access": "none",
+      "groups": ["users"]
+    },
+    
+    "_monitoring_user": {
+      "github_user": "monitor-bot",
+      "local_user": "monitoring",
+      "full_name": "Monitoring Service",
+      "sudo_access": "limited",
+      "sudo_commands": [
+        "/usr/bin/systemctl status *",
+        "/bin/ps aux",
+        "/usr/bin/tail -f /var/log/*"
+      ],
+      "groups": ["adm", "systemd-journal"]
+    }
+  },
+  
+  "config": {
+    "default_shell": "/bin/bash",
+    "default_group": "users", 
+    "user_home_base": "/home",
+    "description": "SSH User Management Configuration",
+    "sudo_access_levels": {
+      "full": "Complete sudo access with NOPASSWD",
+      "limited": "Only specified commands allowed", 
+      "none": "No sudo access"
+    },
+    "common_groups": {
+      "sudo": "Full sudo access",
+      "adm": "Read system logs",
+      "systemd-journal": "Read systemd logs",
+      "docker": "Docker daemon access",
+      "www-data": "Web server file access"
+    }
+  }
+}
