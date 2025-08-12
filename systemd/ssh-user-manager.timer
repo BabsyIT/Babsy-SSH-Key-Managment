@@ -1,0 +1,23 @@
+[Unit]
+Description=Run SSH User Manager every 5 minutes
+Documentation=https://github.com/your-org/ssh-key-management/wiki
+Requires=ssh-user-manager.service
+
+[Timer]
+# Alle 5 Minuten ausführen
+OnCalendar=*:0/5:00
+
+# Nach Boot warten bis System bereit
+OnBootSec=3min
+
+# Persistenz bei System-Ausfall
+Persistent=true
+
+# Zufällige Verzögerung zur Lastverteilung  
+RandomizedDelaySec=45
+
+# Genauigkeit (Standard: 1min)
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
