@@ -1,0 +1,34 @@
+[Unit]
+Description=SSH User & Key Manager with GitHub Integration
+Documentation=https://github.com/your-org/ssh-key-management/wiki
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ssh-key-manager/ssh-key-manager.env
+ExecStart=/usr/local/bin/github-ssh-user-manager.sh
+User=root
+Group=root
+
+# Output-Handling
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ssh-user-manager
+
+# Sicherheit
+NoNewPrivileges=false
+PrivateTmp=true
+
+# Timeouts (länger wegen Benutzer-Erstellung)
+TimeoutSec=300
+TimeoutStartSec=120
+
+# Bei Fehlern nicht automatisch neustarten
+Restart=no
+
+# Working Directory
+WorkingDirectory=/tmp
+
+[Install]
+WantedBy=multi-user.target
