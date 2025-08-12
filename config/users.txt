@@ -1,0 +1,23 @@
+# SSH Key Management - User List
+# Ein GitHub-Benutzername pro Zeile
+# Kommentare beginnen mit #
+
+# Hauptadministratoren
+stefan-ffr
+
+# Development Team
+# alice-dev
+# bob-admin
+
+# DevOps Team  
+# maria-ops
+# charlie-devops
+
+# Externe Contractor (temporär)
+# john-contractor
+
+# Notizen:
+# - Entferne # um Benutzer zu aktivieren
+# - Füge # hinzu um Benutzer zu deaktivieren
+# - Leere Zeilen werden ignoriert
+# - Keys werden alle 5 Minuten aktualisiert
