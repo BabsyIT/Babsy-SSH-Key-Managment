@@ -1,0 +1,34 @@
+[Unit]
+Description=SSH Key Manager with GitHub Integration
+Documentation=https://github.com/your-org/ssh-key-management/wiki
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ssh-key-manager/ssh-key-manager.env
+ExecStart=/usr/local/bin/github-ssh-key-manager.sh
+User=root
+Group=root
+
+# Output-Handling
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ssh-key-manager
+
+# Sicherheit
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Timeouts
+TimeoutSec=120
+TimeoutStartSec=60
+
+# Bei Fehlern nicht automatisch neustarten
+Restart=no
+
+# Working Directory
+WorkingDirectory=/tmp
+
+[Install]
+WantedBy=multi-user.target
