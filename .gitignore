@@ -1,0 +1,42 @@
+# SSH Key Management System - .gitignore
+
+# Sensitive configuration files
+config/ssh-key-manager.env
+*.env
+*.key
+*.pem
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Log files (except the ones pushed by the scripts)
+*.log
+!logs/*.log
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# OS generated files
+.Trash-*
+.fuse_hidden*
+
+# Local development
+local/
+test/
+dev/
+
+# Personal notes
+NOTES.md
+TODO.md
