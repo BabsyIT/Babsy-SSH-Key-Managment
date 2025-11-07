@@ -1,0 +1,7 @@
+# This directory contains Ansible inventory files
+#
+# IMPORTANT: Real inventory files are git-ignored for security!
+# Use hosts.yml.example as template to create your hosts.yml
+#
+# cp hosts.yml.example hosts.yml
+# nano hosts.yml  # Add your real hosts

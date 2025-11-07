@@ -8,6 +8,7 @@
       - curl
       - python3
       - jq
+      - openssh-server
     state: present
     update_cache: yes
   tags: [setup, packages]
@@ -27,6 +28,10 @@
     mode: '0700'
   when: create_backups
   tags: [setup]
+
+- name: Configure SSH daemon for dual authorized_keys files
+  include_tasks: configure_sshd.yml
+  tags: [sshd]
 
 - name: Load user mapping from file
   set_fact:

@@ -1,24 +1,57 @@
 # SSH Key Management System - .gitignore
 
-# Sensitive configuration files
+# ⚠️ SENSITIVE FILES - NEVER COMMIT TO PUBLIC REPO! ⚠️
+
+# Credentials & Secrets
 config/ssh-key-manager.env
+config/m365-config.json
+/etc/ssh-key-manager/m365-config.json
 *.env
 *.key
 *.pem
+*secret*
+*credentials*
+*.token
+.secrets/
 
-# Backup files
+# SSH Files (contain host fingerprints, keys)
+*.pub
+known_hosts
+authorized_keys
+id_rsa*
+id_ed25519*
+id_ecdsa*
+.ssh/
+
+# Real User Data (DSGVO/GDPR!)
+config/user-mapping.json
+# Only commit examples, not real data!
+
+# Real Ansible Inventory (contains internal IPs/hostnames)
+ansible/inventory/hosts.yml
+# Only commit examples/templates, not real inventory!
+
+# Backups (may contain old secrets)
 *.backup
 *.bak
 *~
+*.old
+backup/
+backups/
 
-# Log files (except the ones pushed by the scripts)
+# Log files (may contain usernames, IPs, internal info)
 *.log
-!logs/*.log
+logs/*.log
+/var/log/
+*.access
+*.error
 
 # Temporary files
 *.tmp
 *.temp
 /tmp/
+*.cache
+.cache/
 
 # Editor files
 .vscode/
@@ -37,6 +70,62 @@ local/
 test/
 dev/
 
-# Personal notes
+# Personal/Internal notes (may contain internal IPs, plans)
 NOTES.md
 TODO.md
+INTERNAL*.md
+PRIVATE*.md
+notes/
+docs/internal/
+
+# Infrastructure files with real data
+*.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+.vagrant/
+Vagrantfile.local
+
+# Database dumps
+*.sql
+*.db
+*.sqlite
+*.dump
+
+# Core dumps & debug files
+core
+*.core
+*.dmp
+debug/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+env/
+ENV/
+
+# Ansible
+*.retry
+.ansible/
+ansible.log
+ansible/group_vars/production.yml
+ansible/host_vars/*.yml

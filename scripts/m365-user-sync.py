@@ -23,24 +23,37 @@ logger = logging.getLogger('m365-sync')
 class M365UserSync:
     """Handles synchronization of users from Microsoft 365 to local configuration"""
 
-    def __init__(self, config_path: str = '/etc/ssh-key-manager/m365-config.json'):
-        """Initialize M365 sync with configuration"""
-        self.config = self._load_config(config_path)
+    def __init__(self):
+        """Initialize M365 sync with configuration from environment variables"""
+        self.config = self._load_config_from_env()
         self.access_token = None
 
-    def _load_config(self, config_path: str) -> Dict:
-        """Load M365 configuration from file"""
-        try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-            logger.info(f"Configuration loaded from {config_path}")
-            return config
-        except FileNotFoundError:
-            logger.error(f"Configuration file not found: {config_path}")
+    def _load_config_from_env(self) -> Dict:
+        """Load M365 configuration from environment variables"""
+        config = {
+            'tenant_id': os.environ.get('M365_TENANT_ID'),
+            'client_id': os.environ.get('M365_CLIENT_ID'),
+            'client_secret': os.environ.get('M365_CLIENT_SECRET'),
+            'it_group_name': os.environ.get('M365_IT_GROUP_NAME', 'IT-Team'),
+            'github_username_field': os.environ.get('M365_GITHUB_USERNAME_FIELD', 'extensionAttribute1'),
+            'user_mapping_file': os.environ.get('USER_MAPPING_FILE', 'config/user-mapping.json'),
+            'default_sudo_access': os.environ.get('DEFAULT_SUDO_ACCESS', 'limited'),
+            'default_groups': json.loads(os.environ.get('DEFAULT_GROUPS', '["users", "sudo", "docker", "adm"]')),
+            'default_sudo_commands': json.loads(os.environ.get('DEFAULT_SUDO_COMMANDS',
+                '["/usr/bin/systemctl restart *", "/usr/bin/systemctl reload *", "/usr/bin/systemctl status *", "/usr/bin/docker *", "/usr/bin/journalctl *"]'))
+        }
+
+        # Validate required parameters
+        required = ['tenant_id', 'client_id', 'client_secret']
+        missing = [k for k in required if not config.get(k)]
+
+        if missing:
+            logger.error(f"Missing required environment variables: {', '.join(missing)}")
+            logger.error("Required: M365_TENANT_ID, M365_CLIENT_ID, M365_CLIENT_SECRET")
             sys.exit(1)
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in configuration: {e}")
-            sys.exit(1)
+
+        logger.info("Configuration loaded from environment variables")
+        return config
 
     def authenticate(self) -> bool:
         """Authenticate with Microsoft Graph API using client credentials flow"""
@@ -272,10 +285,9 @@ class M365UserSync:
 
 def main():
     """Main entry point"""
-    # Check for config file path from environment or use default
-    config_path = os.environ.get('M365_CONFIG_PATH', '/etc/ssh-key-manager/m365-config.json')
+    logger.info("Starting M365 user synchronization from environment variables")
 
-    syncer = M365UserSync(config_path)
+    syncer = M365UserSync()
 
     if syncer.sync_users():
         logger.info("User synchronization completed successfully")
