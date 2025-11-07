@@ -44,32 +44,22 @@ jobs:
         run: |
           pip install requests
 
-      - name: Create M365 config from secrets
-        run: |
-          cat > /tmp/m365-config.json <<EOF
-          {
-            "tenant_id": "${{ secrets.M365_TENANT_ID }}",
-            "client_id": "${{ secrets.M365_CLIENT_ID }}",
-            "client_secret": "${{ secrets.M365_CLIENT_SECRET }}",
-            "it_group_name": "${{ secrets.M365_IT_GROUP_NAME }}",
-            "github_username_field": "${{ secrets.M365_GITHUB_USERNAME_FIELD }}",
-            "user_mapping_file": "${{ github.workspace }}/config/user-mapping.json",
-            "default_sudo_access": "limited",
-            "default_groups": ["users", "sudo", "docker", "adm"],
-            "default_sudo_commands": [
-              "/usr/bin/systemctl restart *",
-              "/usr/bin/systemctl reload *",
-              "/usr/bin/systemctl status *",
-              "/usr/bin/docker *",
-              "/usr/bin/journalctl *"
-            ]
-          }
-          EOF
-          chmod 600 /tmp/m365-config.json
-
       - name: Run M365 user synchronization
         env:
-          M365_CONFIG_PATH: /tmp/m365-config.json
+          # M365 Authentication
+          M365_TENANT_ID: ${{ secrets.M365_TENANT_ID }}
+          M365_CLIENT_ID: ${{ secrets.M365_CLIENT_ID }}
+          M365_CLIENT_SECRET: ${{ secrets.M365_CLIENT_SECRET }}
+
+          # M365 Configuration
+          M365_IT_GROUP_NAME: ${{ secrets.M365_IT_GROUP_NAME }}
+          M365_GITHUB_USERNAME_FIELD: ${{ secrets.M365_GITHUB_USERNAME_FIELD }}
+
+          # User Configuration
+          USER_MAPPING_FILE: ${{ github.workspace }}/config/user-mapping.json
+          DEFAULT_SUDO_ACCESS: limited
+          DEFAULT_GROUPS: '["users", "sudo", "docker", "adm"]'
+          DEFAULT_SUDO_COMMANDS: '["/usr/bin/systemctl restart *", "/usr/bin/systemctl reload *", "/usr/bin/systemctl status *", "/usr/bin/docker *", "/usr/bin/journalctl *"]'
         run: |
           python3 scripts/m365-user-sync.py
         continue-on-error: false
