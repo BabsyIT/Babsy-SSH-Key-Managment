@@ -52,6 +52,13 @@ gh workflow run deploy-users.yml -f dry_run=true
 
 ## 📚 Dokumentation
 
+### 📖 GitHub Wiki
+- **[Wiki Home](https://github.com/BabsyIT/Babsy-SSH-Key-Managment/wiki)** - Umfassende Dokumentation
+- **[Production Deployment Guide](https://github.com/BabsyIT/Babsy-SSH-Key-Managment/wiki/Production-Deployment)** - 30-Min Setup
+- **[Troubleshooting](https://github.com/BabsyIT/Babsy-SSH-Key-Managment/wiki/Troubleshooting)** - Problemlösung
+
+**Wiki Setup:** Führe `./scripts/populate-wiki.sh` aus, um das Wiki zu befüllen (siehe [docs/wiki/SETUP-INSTRUCTIONS.md](docs/wiki/SETUP-INSTRUCTIONS.md))
+
 ### Production Setup
 - **[PRODUCTION-DEPLOYMENT.md](PRODUCTION-DEPLOYMENT.md)** ⭐ - **START HERE** für Production
 - **[GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md)** - Detaillierte GitHub Actions Anleitung

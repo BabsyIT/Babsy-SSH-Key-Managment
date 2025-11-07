@@ -2,6 +2,33 @@
 
 ## 📝 So richten Sie das Wiki ein:
 
+## ⚡ Automatisierte Methode (Empfohlen)
+
+Die schnellste und einfachste Methode ist das mitgelieferte Script:
+
+```bash
+# Im Hauptrepository
+cd /pfad/zu/Babsy-SSH-Key-Managment
+
+# Script ausführen
+./scripts/populate-wiki.sh
+```
+
+Das Script wird automatisch:
+1. Wiki Repository klonen (falls noch nicht vorhanden)
+2. Alle Markdown-Dateien aus docs/wiki/ kopieren
+3. Änderungen committen und pushen
+4. Status-Meldungen ausgeben
+
+✅ **Fertig!** Ihr Wiki ist jetzt verfügbar unter:
+**https://github.com/BabsyIT/Babsy-SSH-Key-Managment/wiki**
+
+---
+
+## 📖 Manuelle Methode (Alternative)
+
+Falls Sie das Wiki manuell einrichten möchten:
+
 ### Schritt 1: Wiki aktivieren (GitHub Web UI)
 
 ```bash
