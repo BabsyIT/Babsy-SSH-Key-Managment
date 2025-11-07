@@ -1,0 +1,43 @@
+---
+# Main playbook to deploy SSH users to all Debian hosts
+# This playbook is triggered by GitHub Actions
+
+- name: Deploy SSH Users and Keys to Debian Hosts
+  hosts: debian_hosts
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Deploying to host: {{ inventory_hostname }}"
+          - "Environment: {{ environment | default('not specified') }}"
+          - "Timestamp: {{ ansible_date_time.iso8601 }}"
+
+    - name: Verify user mapping file exists
+      stat:
+        path: "{{ playbook_dir }}/../../config/user-mapping.json"
+      delegate_to: localhost
+      register: user_mapping_stat
+      run_once: true
+
+    - name: Fail if user mapping file not found
+      fail:
+        msg: "User mapping file not found at {{ playbook_dir }}/../../config/user-mapping.json"
+      when: not user_mapping_stat.stat.exists
+      run_once: true
+
+  roles:
+    - role: ssh_user_management
+
+  post_tasks:
+    - name: Display deployment summary
+      debug:
+        msg: "Successfully deployed users to {{ inventory_hostname }}"
+
+  handlers:
+    - name: Restart sshd
+      service:
+        name: sshd
+        state: restarted

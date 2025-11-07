@@ -1,0 +1,67 @@
+---
+# Import SSH keys from GitHub for a user
+
+- name: "{{ user_item.local_user }} | Fetch SSH keys from GitHub"
+  uri:
+    url: "{{ github_keys_base_url }}/{{ user_item.github_user }}.keys"
+    return_content: yes
+    status_code: [200, 404]
+  register: github_keys_response
+  tags: [ssh_keys]
+
+- name: "{{ user_item.local_user }} | Debug GitHub keys response"
+  debug:
+    msg: "Found {{ github_keys_response.content.split('\n') | select | list | length }} SSH keys for {{ user_item.github_user }}"
+  when: github_keys_response.status == 200
+  tags: [ssh_keys]
+
+- name: "{{ user_item.local_user }} | Backup existing authorized_keys"
+  copy:
+    src: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
+    dest: "{{ backup_dir }}/authorized_keys_{{ user_item.local_user }}_{{ ansible_date_time.epoch }}"
+    remote_src: yes
+    mode: '0600'
+  when:
+    - create_backups
+    - github_keys_response.status == 200
+  ignore_errors: yes
+  tags: [ssh_keys, backup]
+
+- name: "{{ user_item.local_user }} | Ensure .ssh directory exists"
+  file:
+    path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh"
+    state: directory
+    owner: "{{ user_item.local_user }}"
+    group: "{{ user_item.local_user }}"
+    mode: '0700'
+  when: github_keys_response.status == 200
+  tags: [ssh_keys]
+
+- name: "{{ user_item.local_user }} | Write SSH keys to authorized_keys"
+  copy:
+    content: "{{ github_keys_response.content }}"
+    dest: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
+    owner: "{{ user_item.local_user }}"
+    group: "{{ user_item.local_user }}"
+    mode: '0600'
+  when:
+    - github_keys_response.status == 200
+    - github_keys_response.content | length > 0
+  tags: [ssh_keys]
+
+- name: "{{ user_item.local_user }} | Log SSH key import"
+  lineinfile:
+    path: "{{ log_dir }}/ssh_keys.log"
+    line: "{{ ansible_date_time.iso8601 }} - Imported {{ github_keys_response.content.split('\n') | select | list | length }} keys for {{ user_item.local_user }} from GitHub user {{ user_item.github_user }}"
+    create: yes
+    mode: '0644'
+  when:
+    - enable_logging
+    - github_keys_response.status == 200
+  tags: [ssh_keys, logging]
+
+- name: "{{ user_item.local_user }} | Warn if no keys found"
+  debug:
+    msg: "WARNING: No SSH keys found for GitHub user {{ user_item.github_user }}"
+  when: github_keys_response.status != 200 or github_keys_response.content | length == 0
+  tags: [ssh_keys]

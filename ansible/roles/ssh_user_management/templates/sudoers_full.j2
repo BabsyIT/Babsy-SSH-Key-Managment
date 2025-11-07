@@ -1,0 +1,5 @@
+# Sudo configuration for {{ user_item.local_user }}
+# Created by Ansible on {{ ansible_date_time.iso8601 }}
+# Full sudo access with NOPASSWD
+
+{{ user_item.local_user }} ALL=(ALL:ALL) NOPASSWD: ALL

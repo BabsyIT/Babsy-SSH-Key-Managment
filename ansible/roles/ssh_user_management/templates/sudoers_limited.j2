@@ -1,0 +1,8 @@
+# Sudo configuration for {{ user_item.local_user }}
+# Created by Ansible on {{ ansible_date_time.iso8601 }}
+# Limited sudo access - only specified commands allowed
+
+{{ user_item.local_user }} ALL=(ALL:ALL) NOPASSWD: \
+{% for cmd in user_item.sudo_commands %}
+    {{ cmd }}{{ ',' if not loop.last else '' }}
+{% endfor %}
