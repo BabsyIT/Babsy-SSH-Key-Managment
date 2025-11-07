@@ -1,0 +1,53 @@
+---
+# Configure sudo access for user
+
+- name: "{{ user_item.local_user }} | Backup existing sudoers file"
+  copy:
+    src: "/etc/sudoers.d/{{ user_item.local_user }}"
+    dest: "{{ backup_dir }}/sudoers_{{ user_item.local_user }}_{{ ansible_date_time.epoch }}"
+    remote_src: yes
+    mode: '0600'
+  when: create_backups
+  ignore_errors: yes
+  tags: [sudo, backup]
+
+- name: "{{ user_item.local_user }} | Configure full sudo access"
+  template:
+    src: sudoers_full.j2
+    dest: "/etc/sudoers.d/{{ user_item.local_user }}"
+    owner: root
+    group: root
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  when: user_item.sudo_access == "full"
+  tags: [sudo]
+
+- name: "{{ user_item.local_user }} | Configure limited sudo access"
+  template:
+    src: sudoers_limited.j2
+    dest: "/etc/sudoers.d/{{ user_item.local_user }}"
+    owner: root
+    group: root
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  when:
+    - user_item.sudo_access == "limited"
+    - user_item.sudo_commands is defined
+    - user_item.sudo_commands | length > 0
+  tags: [sudo]
+
+- name: "{{ user_item.local_user }} | Remove sudo access"
+  file:
+    path: "/etc/sudoers.d/{{ user_item.local_user }}"
+    state: absent
+  when: user_item.sudo_access == "none"
+  tags: [sudo]
+
+- name: "{{ user_item.local_user }} | Log sudo configuration"
+  lineinfile:
+    path: "{{ log_dir }}/sudo.log"
+    line: "{{ ansible_date_time.iso8601 }} - Configured {{ user_item.sudo_access }} sudo access for {{ user_item.local_user }}"
+    create: yes
+    mode: '0644'
+  when: enable_logging
+  tags: [sudo, logging]

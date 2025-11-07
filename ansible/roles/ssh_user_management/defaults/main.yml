@@ -1,0 +1,21 @@
+---
+# Default variables for SSH user management role
+
+# User configuration source
+user_mapping_file: "{{ playbook_dir }}/../../config/user-mapping.json"
+
+# Default user settings
+default_shell: /bin/bash
+default_group: users
+user_home_base: /home
+
+# GitHub settings
+github_keys_base_url: "https://github.com"
+
+# Backup settings
+create_backups: true
+backup_dir: /var/backups/ssh-user-management
+
+# Logging
+enable_logging: true
+log_dir: /var/log/ssh-user-management

@@ -1,0 +1,56 @@
+---
+# Main tasks for SSH user management role
+
+- name: Ensure required packages are installed
+  apt:
+    name:
+      - sudo
+      - curl
+      - python3
+      - jq
+    state: present
+    update_cache: yes
+  tags: [setup, packages]
+
+- name: Create log directory
+  file:
+    path: "{{ log_dir }}"
+    state: directory
+    mode: '0755'
+  when: enable_logging
+  tags: [setup]
+
+- name: Create backup directory
+  file:
+    path: "{{ backup_dir }}"
+    state: directory
+    mode: '0700'
+  when: create_backups
+  tags: [setup]
+
+- name: Load user mapping from file
+  set_fact:
+    user_config: "{{ lookup('file', user_mapping_file) | from_json }}"
+  tags: [always]
+
+- name: Display user count
+  debug:
+    msg: "Managing {{ user_config.users | length }} users"
+  tags: [always]
+
+- name: Process each user
+  include_tasks: manage_user.yml
+  loop: "{{ user_config.users }}"
+  loop_control:
+    loop_var: user_item
+    label: "{{ user_item.local_user }}"
+  tags: [users]
+
+- name: Create deployment log entry
+  lineinfile:
+    path: "{{ log_dir }}/deployment.log"
+    line: "{{ ansible_date_time.iso8601 }} - Deployed {{ user_config.users | length }} users to {{ inventory_hostname }}"
+    create: yes
+    mode: '0644'
+  when: enable_logging
+  tags: [logging]

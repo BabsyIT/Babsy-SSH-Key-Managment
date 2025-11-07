@@ -1,0 +1,19 @@
+---
+# Global variables for all hosts
+
+# User Management Settings
+default_shell: /bin/bash
+default_group: users
+user_home_base: /home
+
+# GitHub Settings
+github_api_url: https://api.github.com
+github_keys_url: https://github.com
+
+# Logging
+log_directory: /var/log/ssh-user-management
+log_file: "{{ log_directory }}/ansible-deployment.log"
+
+# Backup Settings
+backup_enabled: true
+backup_directory: /var/backups/ssh-user-management

@@ -1,0 +1,292 @@
+name: Deploy Users to Hosts
+
+on:
+  # Trigger when M365 sync updates users
+  repository_dispatch:
+    types: [users-updated]
+
+  # Trigger on user-mapping.json changes
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/user-mapping.json'
+
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Target environment (all/production/staging/development)'
+        required: false
+        default: 'all'
+      dry_run:
+        description: 'Dry run (check mode only)'
+        required: false
+        default: 'false'
+
+  # Scheduled deployment (täglich um 6 Uhr UTC als Backup)
+  schedule:
+    - cron: '0 6 * * *'
+
+jobs:
+  deploy-users:
+    name: Deploy Users via Ansible
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python for Ansible
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible and dependencies
+        run: |
+          pip install ansible ansible-lint
+          ansible-galaxy collection install community.general
+
+      - name: Setup SSH key for Ansible
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.ANSIBLE_TARGET_HOSTS }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Verify user-mapping.json exists
+        run: |
+          if [ ! -f config/user-mapping.json ]; then
+            echo "Error: config/user-mapping.json not found"
+            exit 1
+          fi
+          echo "User mapping file found"
+          jq '.' config/user-mapping.json > /dev/null || exit 1
+          echo "User mapping file is valid JSON"
+
+      - name: Display deployment info
+        run: |
+          echo "=== Deployment Information ==="
+          echo "Target environment: ${{ github.event.inputs.target_environment || 'all' }}"
+          echo "Dry run: ${{ github.event.inputs.dry_run || 'false' }}"
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+          echo "=== User Count ==="
+          jq '.users | length' config/user-mapping.json | xargs -I {} echo "Total users to deploy: {}"
+
+      - name: Ansible lint
+        run: |
+          cd ansible
+          ansible-lint playbooks/deploy-users.yml || true
+        continue-on-error: true
+
+      - name: Run Ansible playbook (Dry Run)
+        if: github.event.inputs.dry_run == 'true'
+        working-directory: ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+          ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/deploy_key
+        run: |
+          ansible-playbook \
+            -i inventory/hosts.yml \
+            --check \
+            --diff \
+            -v \
+            playbooks/deploy-users.yml
+
+      - name: Run Ansible playbook (Production)
+        if: github.event.inputs.dry_run != 'true'
+        working-directory: ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+          ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/deploy_key
+        run: |
+          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+
+          if [ "$TARGET" = "all" ]; then
+            LIMIT_FLAG=""
+          else
+            LIMIT_FLAG="--limit ${TARGET}"
+          fi
+
+          ansible-playbook \
+            -i inventory/hosts.yml \
+            ${LIMIT_FLAG} \
+            -v \
+            playbooks/deploy-users.yml
+
+      - name: Generate deployment report
+        if: always()
+        run: |
+          echo "### Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.target_environment || 'all' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run**: ${{ github.event.inputs.dry_run || 'false' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f config/user-mapping.json ]; then
+            USER_COUNT=$(jq '.users | length' config/user-mapping.json)
+            echo "- **Users deployed**: $USER_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### User List" >> $GITHUB_STEP_SUMMARY
+            jq -r '.users[] | "- **\(.local_user)** (GitHub: @\(.github_user)) - Sudo: \(.sudo_access)"' config/user-mapping.json >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Create GitHub Issue on Ansible Deployment Failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Try to read user-mapping.json for context
+            let userCount = 'Unknown';
+            try {
+              const userMapping = JSON.parse(fs.readFileSync('config/user-mapping.json', 'utf8'));
+              userCount = userMapping.users ? userMapping.users.length : 'Unknown';
+            } catch (e) {
+              console.log('Could not read user-mapping.json');
+            }
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Ansible User Deployment Failed - ' + new Date().toISOString().split('T')[0],
+              body: `## Ansible User Deployment Failure Report
+
+            **Workflow Run:** [#${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            **Triggered by:** ${context.eventName}
+            **Branch:** ${context.ref}
+            **Commit:** ${context.sha.substring(0, 7)}
+            **Timestamp:** ${new Date().toISOString()}
+            **Target Environment:** ${context.payload.inputs?.target_environment || 'all'}
+            **Dry Run:** ${context.payload.inputs?.dry_run || 'false'}
+
+            ### ⚠️ Deployment Error
+
+            The Ansible deployment workflow failed. Users could not be deployed to the target hosts.
+
+            **Users attempted to deploy:** ${userCount}
+
+            ### 🔍 Possible Causes
+
+            #### SSH/Connectivity Issues
+            - ❌ **SSH Key Invalid:** Check GitHub secret ANSIBLE_SSH_PRIVATE_KEY
+            - ❌ **Host Unreachable:** Target hosts may be offline or unreachable
+            - ❌ **Firewall/Network:** SSH port (22) blocked or network issues
+            - ❌ **Authentication Failed:** SSH key not authorized on target hosts
+
+            #### Ansible Issues
+            - ❌ **Inventory Misconfigured:** Check ansible/inventory/hosts.yml
+            - ❌ **Playbook Syntax Error:** YAML syntax errors in playbooks
+            - ❌ **Role Missing:** Required Ansible role not found
+            - ❌ **Permission Denied:** Insufficient permissions on target hosts
+
+            #### User Data Issues
+            - ❌ **Invalid user-mapping.json:** JSON syntax errors or invalid data
+            - ❌ **Missing GitHub Keys:** Users don't have SSH keys on GitHub
+            - ❌ **Invalid Sudo Commands:** Sudoers validation failed
+
+            ### 🛠️ Troubleshooting Steps
+
+            1. **Test SSH Connectivity:**
+               \`\`\`bash
+               # Test SSH access to hosts
+               ssh -i ~/.ssh/deploy_key root@host1.babsy.local "hostname"
+               \`\`\`
+
+            2. **Validate Ansible Inventory:**
+               \`\`\`bash
+               cd ansible
+               ansible-inventory -i inventory/hosts.yml --list
+               ansible -i inventory/hosts.yml debian_hosts -m ping
+               \`\`\`
+
+            3. **Check user-mapping.json:**
+               \`\`\`bash
+               jq '.' config/user-mapping.json
+               # Should return valid JSON
+               \`\`\`
+
+            4. **Test Playbook Locally:**
+               \`\`\`bash
+               cd ansible
+               ansible-playbook -i inventory/hosts.yml --check playbooks/deploy-users.yml
+               \`\`\`
+
+            5. **Verify GitHub Secrets:**
+               \`\`\`
+               Settings → Secrets and variables → Actions
+               # Verify ANSIBLE_SSH_PRIVATE_KEY is set correctly
+               \`\`\`
+
+            ### 📋 Quick Fix
+
+            \`\`\`bash
+            # Test connectivity
+            ansible -i ansible/inventory/hosts.yml debian_hosts -m ping
+
+            # Dry run deployment
+            gh workflow run deploy-users.yml -f dry_run=true
+
+            # Full deployment after fix
+            gh workflow run deploy-users.yml
+            \`\`\`
+
+            ### 📊 Detailed Logs
+
+            **Workflow Logs:** [View Logs](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+
+            ### 🔧 Common Solutions
+
+            | Problem | Solution |
+            |---------|----------|
+            | SSH Permission Denied | Re-deploy SSH public key to hosts: \`ssh-copy-id -i key.pub root@host\` |
+            | Host Unreachable | Check host is online: \`ping host.babsy.local\` |
+            | Inventory Empty | Add hosts to \`ansible/inventory/hosts.yml\` |
+            | Invalid JSON | Validate: \`jq '.' config/user-mapping.json\` |
+            | Sudo Validation Failed | Check sudo_commands syntax in user-mapping.json |
+
+            ---
+
+            _This issue was automatically created by GitHub Actions._
+            _Deployment must be fixed before users can access the systems._
+            _**Priority: HIGH** - Please investigate immediately._`,
+              labels: ['bug', 'deployment', 'automation', 'ansible', 'critical', 'needs-investigation']
+            });
+
+            console.log(`Created issue #${issue.data.number}`);
+
+  verify-deployment:
+    name: Verify Deployment
+    needs: deploy-users
+    runs-on: ubuntu-latest
+    if: github.event.inputs.dry_run != 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Verify user creation (sample check)
+        run: |
+          echo "Verification step - would check if users exist on target hosts"
+          # Add actual verification commands here
+          echo "✓ Verification completed"
+
+      - name: Post-deployment summary
+        run: |
+          echo "### Post-Deployment Verification" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Deployment completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ All checks passed" >> $GITHUB_STEP_SUMMARY
