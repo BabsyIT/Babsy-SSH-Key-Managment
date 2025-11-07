@@ -11,16 +11,16 @@
 
 ## ✨ Features
 
-✅ **Automatische SSH-Key-Synchronisation** von GitHub
-✅ **Microsoft 365 Integration** - User aus M365 IT-Team automatisch synchronisieren
-✅ **Zentrale Benutzerverwaltung** über GitHub Repository oder M365
-✅ **Automatische Benutzeranlage** mit konfigurierbaren Rechten
-✅ **GitHub Username Mapping** via M365 Extension Attributes
-✅ **Sudo-Rechte-Management** (full/limited/none)
-✅ **Gruppen-Management** für Systemzugriff
-✅ **Zentrale Logs** in GitHub für alle Hosts
-✅ **Automatische Updates** (M365: stündlich, SSH-Keys: alle 5 Minuten)
-✅ **Lock-Mechanismus** gegen parallele Ausführung  
+- ✅ **Automatische SSH-Key-Synchronisation** von GitHub
+- ✅ **Microsoft 365 Integration** - User aus M365 IT-Team automatisch synchronisieren
+- ✅ **Zentrale Benutzerverwaltung** über GitHub Repository oder M365
+- ✅ **Automatische Benutzeranlage** mit konfigurierbaren Rechten
+- ✅ **GitHub Username Mapping** via M365 Extension Attributes
+- ✅ **Sudo-Rechte-Management** (full/limited/none)
+- ✅ **Gruppen-Management** für Systemzugriff
+- ✅ **Zentrale Logs** in GitHub für alle Hosts
+- ✅ **Automatische Updates** (M365: stündlich, SSH-Keys: alle 5 Minuten)
+- ✅ **Lock-Mechanismus** gegen parallele Ausführung  
 
 ## 🎯 Drei Modi verfügbar
 
