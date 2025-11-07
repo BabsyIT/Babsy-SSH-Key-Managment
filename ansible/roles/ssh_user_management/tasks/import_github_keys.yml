@@ -15,10 +15,10 @@
   when: github_keys_response.status == 200
   tags: [ssh_keys]
 
-- name: "{{ user_item.local_user }} | Backup existing authorized_keys"
+- name: "{{ user_item.local_user }} | Backup existing authorized_keys_github"
   copy:
-    src: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
-    dest: "{{ backup_dir }}/authorized_keys_{{ user_item.local_user }}_{{ ansible_date_time.epoch }}"
+    src: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys_github"
+    dest: "{{ backup_dir }}/authorized_keys_github_{{ user_item.local_user }}_{{ ansible_date_time.epoch }}"
     remote_src: yes
     mode: '0600'
   when:
@@ -37,16 +37,50 @@
   when: github_keys_response.status == 200
   tags: [ssh_keys]
 
-- name: "{{ user_item.local_user }} | Write SSH keys to authorized_keys"
+- name: "{{ user_item.local_user }} | Write SSH keys to authorized_keys_github (separate file)"
   copy:
-    content: "{{ github_keys_response.content }}"
-    dest: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
+    content: |
+      # Automatically managed keys from GitHub
+      # User: {{ user_item.github_user }}
+      # Last updated: {{ ansible_date_time.iso8601 }}
+      # DO NOT manually edit this file - changes will be overwritten
+      # Use ~/.ssh/authorized_keys for manual keys
+
+      {{ github_keys_response.content }}
+    dest: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys_github"
     owner: "{{ user_item.local_user }}"
     group: "{{ user_item.local_user }}"
     mode: '0600'
   when:
     - github_keys_response.status == 200
     - github_keys_response.content | length > 0
+  tags: [ssh_keys]
+
+- name: "{{ user_item.local_user }} | Create/preserve manual authorized_keys file"
+  file:
+    path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
+    state: touch
+    owner: "{{ user_item.local_user }}"
+    group: "{{ user_item.local_user }}"
+    mode: '0600'
+    modification_time: preserve
+    access_time: preserve
+  when: github_keys_response.status == 200
+  tags: [ssh_keys]
+
+- name: "{{ user_item.local_user }} | Add header to manual authorized_keys"
+  blockinfile:
+    path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
+    marker: "# {mark} SSH-USER-MANAGEMENT HEADER"
+    block: |
+      # Manual SSH Keys - Add your keys below
+      # GitHub-managed keys are in: ~/.ssh/authorized_keys_github
+      # Both files are used for authentication
+    create: yes
+    owner: "{{ user_item.local_user }}"
+    group: "{{ user_item.local_user }}"
+    mode: '0600'
+  when: github_keys_response.status == 200
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Log SSH key import"
