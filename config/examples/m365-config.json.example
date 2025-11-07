@@ -1,0 +1,88 @@
+{
+  "_comment": "Microsoft 365 Integration Configuration for SSH User Management",
+  "_documentation": "https://github.com/your-org/ssh-key-management/wiki/M365-Integration",
+  "_setup_guide": "See README.md for complete setup instructions",
+
+  "tenant_id": "your-tenant-id.onmicrosoft.com",
+  "client_id": "your-application-client-id",
+  "client_secret": "your-application-client-secret",
+
+  "_azure_app_setup": {
+    "_step1": "Go to Azure Portal -> Azure Active Directory -> App registrations",
+    "_step2": "Create new registration or use existing one",
+    "_step3": "Under 'API permissions', add Microsoft Graph permissions:",
+    "_required_permissions": [
+      "User.Read.All",
+      "Group.Read.All",
+      "Directory.Read.All"
+    ],
+    "_step4": "Grant admin consent for these permissions",
+    "_step5": "Create a client secret under 'Certificates & secrets'",
+    "_step6": "Copy tenant ID, client ID, and client secret to this config file"
+  },
+
+  "it_group_name": "IT-Team",
+  "_it_group_note": "Name of the Microsoft 365 group containing IT team members who should get SSH access",
+
+  "github_username_field": "extensionAttribute1",
+  "_github_field_options": {
+    "_option1": "extensionAttribute1 through extensionAttribute15 (on-premises AD sync)",
+    "_option2": "Use custom extension attributes if using Azure AD schema extensions",
+    "_note": "This field must contain the GitHub username for each user"
+  },
+
+  "_extension_attribute_setup": {
+    "_for_onpremises_ad": "Set-ADUser -Identity username -Replace @{extensionAttribute1='github-username'}",
+    "_for_azure_ad": "Use Azure AD schema extensions or update via Graph API",
+    "_sync_note": "If using AD Connect, extension attributes sync automatically"
+  },
+
+  "user_mapping_file": "/root/Babsy-SSH-Key-Managment/config/user-mapping.json",
+  "_user_mapping_note": "Path where synced users will be written",
+
+  "default_sudo_access": "limited",
+  "_sudo_options": ["full", "limited", "none"],
+
+  "default_groups": ["users", "sudo", "docker", "adm"],
+  "_groups_note": "Default Linux groups for synced users",
+
+  "default_sudo_commands": [
+    "/usr/bin/systemctl restart *",
+    "/usr/bin/systemctl reload *",
+    "/usr/bin/systemctl status *",
+    "/usr/bin/docker *",
+    "/usr/bin/journalctl *",
+    "/usr/bin/tail -f /var/log/*"
+  ],
+  "_sudo_commands_note": "Commands allowed when sudo_access is 'limited'",
+
+  "sync_interval_minutes": 60,
+  "_sync_note": "How often to sync users from M365 (systemd timer)",
+
+  "log_level": "INFO",
+  "_log_levels": ["DEBUG", "INFO", "WARNING", "ERROR"],
+
+  "_example_users": {
+    "_description": "Examples of how M365 users will be transformed",
+    "_m365_user": {
+      "displayName": "Max Mustermann",
+      "userPrincipalName": "max.mustermann@babsy.chh",
+      "extensionAttribute1": "max-github"
+    },
+    "_becomes": {
+      "github_user": "max-github",
+      "local_user": "maxmustermann",
+      "full_name": "Max Mustermann",
+      "sudo_access": "limited",
+      "groups": ["users", "sudo", "docker"],
+      "m365_upn": "max.mustermann@babsy.chh"
+    }
+  },
+
+  "_security_notes": {
+    "_file_permissions": "This file contains secrets! Set permissions: chmod 600 /etc/ssh-key-manager/m365-config.json",
+    "_client_secret": "Store client secret securely, rotate regularly",
+    "_least_privilege": "Grant only necessary Microsoft Graph API permissions",
+    "_audit": "Monitor sync logs for unauthorized access attempts"
+  }
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=Microsoft 365 User Sync Timer (Hourly)
+Documentation=https://github.com/your-org/ssh-key-management/wiki
+Requires=m365-user-sync.service
+
+[Timer]
+# Run every hour
+OnCalendar=hourly
+OnBootSec=5min
+
+# Run immediately if the last run was missed (e.g., system was powered off)
+Persistent=true
+
+# Randomize start time by up to 5 minutes to avoid load spikes
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

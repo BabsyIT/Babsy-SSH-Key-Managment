@@ -1,0 +1,35 @@
+[Unit]
+Description=Microsoft 365 User Synchronization for SSH Management
+Documentation=https://github.com/your-org/ssh-key-management/wiki
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ssh-key-manager/ssh-key-manager.env
+EnvironmentFile=-/etc/ssh-key-manager/m365-config.json
+ExecStart=/usr/local/bin/m365-sync-wrapper.sh
+User=root
+Group=root
+
+# Output-Handling
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=m365-sync
+
+# Security
+NoNewPrivileges=false
+PrivateTmp=true
+
+# Timeouts
+TimeoutSec=300
+TimeoutStartSec=120
+
+# Bei Fehlern nicht automatisch neustarten
+Restart=no
+
+# Working Directory
+WorkingDirectory=/tmp
+
+[Install]
+WantedBy=multi-user.target

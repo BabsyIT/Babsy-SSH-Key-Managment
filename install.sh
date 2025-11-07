@@ -39,13 +39,18 @@ CONFIG_DIR="/etc/ssh-key-manager"
 # Schritt 1: Abhängigkeiten installieren
 log_info "Installing dependencies..."
 apt update -qq
-apt install -y ssh-import-id jq curl systemd
+apt install -y ssh-import-id jq curl systemd python3 python3-pip git
+pip3 install requests
 
 # Schritt 2: Scripts installieren
 log_info "Installing SSH key management scripts..."
 cp "$SCRIPT_DIR/scripts/github-ssh-key-manager.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/scripts/github-ssh-user-manager.sh" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/scripts/m365-sync-wrapper.sh" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/scripts/m365-user-sync.py" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/github-ssh-"*.sh
+chmod +x "$INSTALL_DIR/m365-"*.sh
+chmod +x "$INSTALL_DIR/m365-"*.py
 log_success "Scripts installed to $INSTALL_DIR"
 
 # Schritt 3: Systemd Services installieren
@@ -75,7 +80,30 @@ EOF
     log_warning "Created $CONFIG_DIR/ssh-key-manager.env - PLEASE EDIT WITH YOUR SETTINGS!"
 fi
 
-# Schritt 5: Auswahl des Modus
+# Schritt 5: M365 Integration (optional)
+echo
+log_info "Do you want to enable Microsoft 365 integration?"
+echo "This will sync users from M365 IT-Team group automatically."
+echo
+read -p "Enable M365 integration? (y/n): " M365_CHOICE
+
+if [[ $M365_CHOICE =~ ^[Yy]$ ]]; then
+    log_info "Setting up M365 integration..."
+
+    # Create M365 config from example
+    if [[ ! -f "$CONFIG_DIR/m365-config.json" ]]; then
+        cp "$SCRIPT_DIR/config/examples/m365-config.json.example" "$CONFIG_DIR/m365-config.json"
+        chmod 600 "$CONFIG_DIR/m365-config.json"
+        log_warning "Created $CONFIG_DIR/m365-config.json - PLEASE EDIT WITH YOUR M365 SETTINGS!"
+    fi
+
+    # Enable M365 sync timer
+    systemctl enable m365-user-sync.timer
+    log_success "M365 integration enabled"
+    log_warning "Configure Azure AD app and edit: $CONFIG_DIR/m365-config.json"
+fi
+
+# Schritt 6: Auswahl des Modus
 echo
 log_info "Choose your management mode:"
 echo "1) Simple Key Management - Update keys for existing users"
@@ -109,10 +137,16 @@ case $MODE_CHOICE in
         ;;
 esac
 
-# Schritt 6: Services starten (optional)
+# Schritt 7: Services starten (optional)
 echo
 read -p "Start the services now? (y/n): " START_NOW
 if [[ $START_NOW =~ ^[Yy]$ ]]; then
+    # Start M365 sync if enabled
+    if [[ $M365_CHOICE =~ ^[Yy]$ ]]; then
+        systemctl start m365-user-sync.timer
+        log_success "Started m365-user-sync.timer"
+    fi
+
     case $MODE_CHOICE in
         1)
             systemctl start ssh-key-manager.timer
@@ -130,24 +164,36 @@ if [[ $START_NOW =~ ^[Yy]$ ]]; then
     esac
 fi
 
-# Schritt 7: Status anzeigen
+# Schritt 8: Status anzeigen
 echo
 log_info "Installation completed! Next steps:"
 echo
 echo "1. Edit configuration files:"
 echo "   - $CONFIG_DIR/ssh-key-manager.env"
+if [[ $M365_CHOICE =~ ^[Yy]$ ]]; then
+echo "   - $CONFIG_DIR/m365-config.json (IMPORTANT: Configure Azure AD app!)"
+fi
 echo "   - $SCRIPT_DIR/config/users.txt (for simple mode)"
 echo "   - $SCRIPT_DIR/config/user-mapping.json (for full mode)"
 echo
 echo "2. Test the installation:"
+if [[ $M365_CHOICE =~ ^[Yy]$ ]]; then
+echo "   sudo $INSTALL_DIR/m365-sync-wrapper.sh (sync from M365)"
+fi
 echo "   sudo $INSTALL_DIR/github-ssh-key-manager.sh"
 echo "   sudo $INSTALL_DIR/github-ssh-user-manager.sh"
 echo
 echo "3. Check service status:"
+if [[ $M365_CHOICE =~ ^[Yy]$ ]]; then
+echo "   sudo systemctl status m365-user-sync.timer"
+fi
 echo "   sudo systemctl status ssh-key-manager.timer"
 echo "   sudo systemctl status ssh-user-manager.timer"
 echo
 echo "4. View logs:"
+if [[ $M365_CHOICE =~ ^[Yy]$ ]]; then
+echo "   sudo journalctl -u m365-user-sync.service -f"
+fi
 echo "   sudo journalctl -u ssh-key-manager.service -f"
 echo "   sudo journalctl -u ssh-user-manager.service -f"
 echo
