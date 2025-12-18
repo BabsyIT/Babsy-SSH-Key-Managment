@@ -1,9 +1,9 @@
 name: M365 User Sync
 
-on:
+#on:
   # Stündliche Synchronisation
-  schedule:
-    - cron: '0 * * * *'  # Every hour at :00
+#  schedule:
+#    - cron: '0 * * * *'  # Every hour at :00
 
   # Manuelle Ausführung
   workflow_dispatch:
