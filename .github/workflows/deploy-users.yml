@@ -61,6 +61,12 @@ jobs:
           echo "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory/hosts.yml
           echo "✓ Ansible inventory restored"
 
+      - name: Restore user-mapping.json from Secret
+        run: |
+          mkdir -p config
+          echo "${{ secrets.USER_MAPPING_JSON }}" > config/user-mapping.json
+          echo "✓ User mapping restored"
+
       - name: Verify user-mapping.json exists
         run: |
           if [ ! -f config/user-mapping.json ]; then

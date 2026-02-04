@@ -1,11 +1,11 @@
 name: M365 User Sync
 
 on:
-  # Stündliche Synchronisation
-  schedule:
-    - cron: '0 * * * *'  # Every hour at :00
+  # Stündliche Synchronisation (deaktiviert - User werden manuell in user-mapping.json gepflegt)
+  # schedule:
+  #   - cron: '0 * * * *'  # Every hour at :00
 
-  # Manuelle Ausführung
+  # Manuelle Ausführung (für später, falls M365-Sync doch gebraucht wird)
   workflow_dispatch:
     inputs:
       force_sync:
@@ -13,14 +13,14 @@ on:
         required: false
         default: 'false'
 
-  # Bei Push zu main (für Testing)
-  push:
-    branches:
-      - main
-    paths:
-      - 'scripts/m365-user-sync.py'
-      - 'config/examples/m365-config.json.example'
-      - '.github/workflows/m365-sync.yml'
+  # Bei Push zu main (deaktiviert - nicht mehr nötig)
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'scripts/m365-user-sync.py'
+  #     - 'config/examples/m365-config.json.example'
+  #     - '.github/workflows/m365-sync.yml'
 
 jobs:
   sync-m365-users:
