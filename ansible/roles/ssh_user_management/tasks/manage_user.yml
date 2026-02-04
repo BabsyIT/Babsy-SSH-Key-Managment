@@ -2,7 +2,7 @@
 # Task file to manage individual user
 
 - name: "{{ user_item.local_user }} | Check if user exists"
-  getent:
+  ansible.builtin.getent:
     database: passwd
     key: "{{ user_item.local_user }}"
     fail_key: false
@@ -10,30 +10,30 @@
   tags: [users]
 
 - name: "{{ user_item.local_user }} | Create user"
-  user:
+  ansible.builtin.user:
     name: "{{ user_item.local_user }}"
     comment: "{{ user_item.full_name | default(user_item.local_user) }}"
     shell: "{{ user_config.config.default_shell | default(default_shell) }}"
     home: "{{ user_home_base }}/{{ user_item.local_user }}"
-    create_home: yes
+    create_home: true
     state: present
   when: user_exists.ansible_facts.getent_passwd is not defined or user_exists.ansible_facts.getent_passwd[user_item.local_user] is not defined
   tags: [users, create]
 
 - name: "{{ user_item.local_user }} | Add user to groups"
-  user:
+  ansible.builtin.user:
     name: "{{ user_item.local_user }}"
     groups: "{{ user_item.groups | join(',') }}"
-    append: yes
+    append: true
   when: user_item.groups is defined and user_item.groups | length > 0
   tags: [users, groups]
 
 - name: "{{ user_item.local_user }} | Import SSH keys from GitHub"
-  include_tasks: import_github_keys.yml
+  ansible.builtin.include_tasks: import_github_keys.yml
   when: user_item.github_user is defined
   tags: [users, ssh_keys]
 
 - name: "{{ user_item.local_user }} | Configure sudo access"
-  include_tasks: configure_sudo.yml
+  ansible.builtin.include_tasks: configure_sudo.yml
   when: user_item.sudo_access is defined
   tags: [users, sudo]

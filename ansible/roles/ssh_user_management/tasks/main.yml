@@ -2,7 +2,7 @@
 # Main tasks for SSH user management role
 
 - name: Ensure required packages are installed
-  apt:
+  ansible.builtin.apt:
     name:
       - sudo
       - curl
@@ -10,11 +10,11 @@
       - jq
       - openssh-server
     state: present
-    update_cache: yes
+    update_cache: true
   tags: [setup, packages]
 
 - name: Create log directory
-  file:
+  ansible.builtin.file:
     path: "{{ log_dir }}"
     state: directory
     mode: '0755'
@@ -22,7 +22,7 @@
   tags: [setup]
 
 - name: Create backup directory
-  file:
+  ansible.builtin.file:
     path: "{{ backup_dir }}"
     state: directory
     mode: '0700'
@@ -30,21 +30,21 @@
   tags: [setup]
 
 - name: Configure SSH daemon for dual authorized_keys files
-  include_tasks: configure_sshd.yml
+  ansible.builtin.include_tasks: configure_sshd.yml
   tags: [sshd]
 
 - name: Load user mapping from file
-  set_fact:
+  ansible.builtin.set_fact:
     user_config: "{{ lookup('file', user_mapping_file) | from_json }}"
   tags: [always]
 
 - name: Display user count
-  debug:
+  ansible.builtin.debug:
     msg: "Managing {{ user_config.users | length }} users"
   tags: [always]
 
 - name: Process each user
-  include_tasks: manage_user.yml
+  ansible.builtin.include_tasks: manage_user.yml
   loop: "{{ user_config.users }}"
   loop_control:
     loop_var: user_item
@@ -52,10 +52,10 @@
   tags: [users]
 
 - name: Create deployment log entry
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ log_dir }}/deployment.log"
     line: "{{ ansible_date_time.iso8601 }} - Deployed {{ user_config.users | length }} users to {{ inventory_hostname }}"
-    create: yes
+    create: true
     mode: '0644'
   when: enable_logging
   tags: [logging]

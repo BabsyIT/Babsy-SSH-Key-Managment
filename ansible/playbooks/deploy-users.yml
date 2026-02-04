@@ -4,26 +4,26 @@
 
 - name: Deploy SSH Users and Keys to Debian Hosts
   hosts: debian_hosts
-  become: yes
-  gather_facts: yes
+  become: true
+  gather_facts: true
 
   pre_tasks:
     - name: Display deployment information
-      debug:
+      ansible.builtin.debug:
         msg:
           - "Deploying to host: {{ inventory_hostname }}"
           - "Environment: {{ environment | default('not specified') }}"
           - "Timestamp: {{ ansible_date_time.iso8601 }}"
 
     - name: Verify user mapping file exists
-      stat:
+      ansible.builtin.stat:
         path: "{{ playbook_dir }}/../../config/user-mapping.json"
       delegate_to: localhost
       register: user_mapping_stat
       run_once: true
 
     - name: Fail if user mapping file not found
-      fail:
+      ansible.builtin.fail:
         msg: "User mapping file not found at {{ playbook_dir }}/../../config/user-mapping.json"
       when: not user_mapping_stat.stat.exists
       run_once: true
@@ -33,11 +33,11 @@
 
   post_tasks:
     - name: Display deployment summary
-      debug:
+      ansible.builtin.debug:
         msg: "Successfully deployed users to {{ inventory_hostname }}"
 
   handlers:
-    - name: Restart sshd
-      service:
+    - name: Restart SSHD
+      ansible.builtin.service:
         name: sshd
         state: restarted

@@ -1,0 +1,31 @@
+# Ansible Lint Configuration for Babsy SSH Key Management
+#
+# This config file suppresses certain warnings that are either:
+# - Difficult to fix without major refactoring (var-naming)
+# - Acceptable in our use case (run-once, name[template])
+# - Legacy code patterns that work fine (ignore-errors in specific cases)
+
+---
+# Exclude certain directories from linting
+exclude_paths:
+  - .cache/
+  - test/
+  - collections/
+
+# Skip specific rules
+skip_list:
+  - var-naming[no-role-prefix]  # Would require refactoring all variable references
+  - name[template]               # Jinja in task names is acceptable for dynamic naming
+  - run-once[task]               # Used intentionally for single-execution tasks
+  - ignore-errors                # Used carefully with proper error handling
+  - yaml[line-length]            # Some lines are legitimately long
+
+# Warn only (don't fail) on these rules
+warn_list:
+  - experimental
+
+# Enable offline mode (don't check for updates)
+offline: true
+
+# Profile to use
+profile: production

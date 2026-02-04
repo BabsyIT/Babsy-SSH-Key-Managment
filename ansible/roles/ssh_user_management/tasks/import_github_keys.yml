@@ -2,33 +2,33 @@
 # Import SSH keys from GitHub for a user
 
 - name: "{{ user_item.local_user }} | Fetch SSH keys from GitHub"
-  uri:
+  ansible.builtin.uri:
     url: "{{ github_keys_base_url }}/{{ user_item.github_user }}.keys"
-    return_content: yes
+    return_content: true
     status_code: [200, 404]
   register: github_keys_response
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Debug GitHub keys response"
-  debug:
+  ansible.builtin.debug:
     msg: "Found {{ github_keys_response.content.split('\n') | select | list | length }} SSH keys for {{ user_item.github_user }}"
   when: github_keys_response.status == 200
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Backup existing authorized_keys_github"
-  copy:
+  ansible.builtin.copy:
     src: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys_github"
     dest: "{{ backup_dir }}/authorized_keys_github_{{ user_item.local_user }}_{{ ansible_date_time.epoch }}"
-    remote_src: yes
+    remote_src: true
     mode: '0600'
   when:
     - create_backups
     - github_keys_response.status == 200
-  ignore_errors: yes
+  ignore_errors: true
   tags: [ssh_keys, backup]
 
 - name: "{{ user_item.local_user }} | Ensure .ssh directory exists"
-  file:
+  ansible.builtin.file:
     path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh"
     state: directory
     owner: "{{ user_item.local_user }}"
@@ -38,7 +38,7 @@
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Write SSH keys to authorized_keys_github (separate file)"
-  copy:
+  ansible.builtin.copy:
     content: |
       # Automatically managed keys from GitHub
       # User: {{ user_item.github_user }}
@@ -57,7 +57,7 @@
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Create/preserve manual authorized_keys file"
-  file:
+  ansible.builtin.file:
     path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
     state: touch
     owner: "{{ user_item.local_user }}"
@@ -69,14 +69,14 @@
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Add header to manual authorized_keys"
-  blockinfile:
+  ansible.builtin.blockinfile:
     path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
     marker: "# {mark} SSH-USER-MANAGEMENT HEADER"
     block: |
       # Manual SSH Keys - Add your keys below
       # GitHub-managed keys are in: ~/.ssh/authorized_keys_github
       # Both files are used for authentication
-    create: yes
+    create: true
     owner: "{{ user_item.local_user }}"
     group: "{{ user_item.local_user }}"
     mode: '0600'
@@ -84,10 +84,10 @@
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Log SSH key import"
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: "{{ log_dir }}/ssh_keys.log"
     line: "{{ ansible_date_time.iso8601 }} - Imported {{ github_keys_response.content.split('\n') | select | list | length }} keys for {{ user_item.local_user }} from GitHub user {{ user_item.github_user }}"
-    create: yes
+    create: true
     mode: '0644'
   when:
     - enable_logging
@@ -95,7 +95,7 @@
   tags: [ssh_keys, logging]
 
 - name: "{{ user_item.local_user }} | Warn if no keys found"
-  debug:
+  ansible.builtin.debug:
     msg: "WARNING: No SSH keys found for GitHub user {{ user_item.github_user }}"
   when: github_keys_response.status != 200 or github_keys_response.content | length == 0
   tags: [ssh_keys]
