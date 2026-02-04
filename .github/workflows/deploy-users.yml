@@ -54,7 +54,12 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.ANSIBLE_TARGET_HOSTS }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Restore Ansible Inventory from Secret
+        run: |
+          mkdir -p ansible/inventory
+          echo "${{ secrets.ANSIBLE_INVENTORY }}" > ansible/inventory/hosts.yml
+          echo "✓ Ansible inventory restored"
 
       - name: Verify user-mapping.json exists
         run: |
