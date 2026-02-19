@@ -50,10 +50,14 @@ jobs:
           ansible-galaxy collection install community.general
 
       - name: Setup SSH key for Ansible
+        env:
+          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          printf '%s' "$ANSIBLE_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          echo "Key fingerprint:"
+          ssh-keygen -l -f ~/.ssh/deploy_key || echo "WARNING: Could not read key fingerprint"
 
       - name: Restore Ansible Inventory from Secret
         env:
