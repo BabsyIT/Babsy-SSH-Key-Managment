@@ -56,15 +56,19 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
 
       - name: Restore Ansible Inventory from Secret
+        env:
+          ANSIBLE_INVENTORY_CONTENT: ${{ secrets.ANSIBLE_INVENTORY }}
         run: |
           mkdir -p ansible/inventory
-          printf '%s\n' '${{ secrets.ANSIBLE_INVENTORY }}' > ansible/inventory/hosts.yml
+          printf '%s\n' "$ANSIBLE_INVENTORY_CONTENT" > ansible/inventory/hosts.yml
           echo "✓ Ansible inventory restored"
 
       - name: Restore user-mapping.json from Secret
+        env:
+          USER_MAPPING_CONTENT: ${{ secrets.USER_MAPPING_JSON }}
         run: |
           mkdir -p config
-          printf '%s\n' '${{ secrets.USER_MAPPING_JSON }}' > config/user-mapping.json
+          printf '%s\n' "$USER_MAPPING_CONTENT" > config/user-mapping.json
           echo "✓ User mapping restored"
 
       - name: Verify user-mapping.json exists
