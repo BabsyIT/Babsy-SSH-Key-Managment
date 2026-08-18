@@ -21,6 +21,13 @@ on:
   schedule:
     - cron: '0 6 * * *'
 
+# Zwei gleichzeitige Läufe würden sich auf denselben Hosts überschreiben.
+# Kein cancel-in-progress: Ein laufender Deploy wird zu Ende geführt, sonst
+# bliebe ein Host mit halb angewandten Änderungen zurück.
+concurrency:
+  group: ssh-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy-users:
     name: Deploy Users via Ansible
