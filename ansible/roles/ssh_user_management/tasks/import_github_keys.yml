@@ -27,6 +27,16 @@
   ignore_errors: true
   tags: [ssh_keys, backup]
 
+# Ohne Schluessel aus einer der beiden Quellen entstuende ein Konto, auf das
+# niemand kommt. Beides zusammen entscheidet, ob geschrieben wird.
+- name: "{{ user_item.local_user }} | Determine keys to deploy"
+  ansible.builtin.set_fact:
+    managed_keys: >-
+      {{ ((github_keys_response.content | default('')).split('\n') | select | list
+          if github_keys_response.status == 200 else [])
+         + (user_item.ssh_keys | default([])) }}
+  tags: [ssh_keys]
+
 - name: "{{ user_item.local_user }} | Ensure .ssh directory exists"
   ansible.builtin.file:
     path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh"
@@ -34,26 +44,25 @@
     owner: "{{ user_item.local_user }}"
     group: "{{ user_item.local_user }}"
     mode: '0700'
-  when: github_keys_response.status == 200
+  when: managed_keys | length > 0
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Write SSH keys to authorized_keys_github (separate file)"
   ansible.builtin.copy:
     content: |
-      # Automatically managed keys from GitHub
-      # User: {{ user_item.github_user }}
-      # Last updated: {{ ansible_date_time.iso8601 }}
-      # DO NOT manually edit this file - changes will be overwritten
-      # Use ~/.ssh/authorized_keys for manual keys
+      # Automatisch verwaltete Schluessel — nicht von Hand bearbeiten.
+      # Quellen: github.com/{{ user_item.github_user }}.keys und im Cockpit hinterlegte Schluessel.
+      # Stand: {{ ansible_date_time.iso8601 }}
+      # Eigene, nicht verwaltete Schluessel gehoeren in ~/.ssh/authorized_keys
 
-      {{ github_keys_response.content }}
+      {% for key in managed_keys %}
+      {{ key }}
+      {% endfor %}
     dest: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys_github"
     owner: "{{ user_item.local_user }}"
     group: "{{ user_item.local_user }}"
     mode: '0600'
-  when:
-    - github_keys_response.status == 200
-    - github_keys_response.content | length > 0
+  when: managed_keys | length > 0
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Create/preserve manual authorized_keys file"
@@ -65,7 +74,7 @@
     mode: '0600'
     modification_time: preserve
     access_time: preserve
-  when: github_keys_response.status == 200
+  when: managed_keys | length > 0
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Add header to manual authorized_keys"
@@ -73,29 +82,29 @@
     path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
     marker: "# {mark} SSH-USER-MANAGEMENT HEADER"
     block: |
-      # Manual SSH Keys - Add your keys below
-      # GitHub-managed keys are in: ~/.ssh/authorized_keys_github
-      # Both files are used for authentication
+      # Eigene, nicht verwaltete Schluessel hier eintragen.
+      # Verwaltete Schluessel stehen in: ~/.ssh/authorized_keys_github
+      # sshd nutzt beide Dateien.
     create: true
     owner: "{{ user_item.local_user }}"
     group: "{{ user_item.local_user }}"
     mode: '0600'
-  when: github_keys_response.status == 200
+  when: managed_keys | length > 0
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Log SSH key import"
   ansible.builtin.lineinfile:
     path: "{{ log_dir }}/ssh_keys.log"
-    line: "{{ ansible_date_time.iso8601 }} - Imported {{ github_keys_response.content.split('\n') | select | list | length }} keys for {{ user_item.local_user }} from GitHub user {{ user_item.github_user }}"
+    line: "{{ ansible_date_time.iso8601 }} - {{ managed_keys | length }} Schluessel fuer {{ user_item.local_user }} (GitHub: {{ user_item.github_user }}, Cockpit: {{ user_item.ssh_keys | default([]) | length }})"
     create: true
     mode: '0644'
   when:
     - enable_logging
-    - github_keys_response.status == 200
+    - managed_keys | length > 0
   tags: [ssh_keys, logging]
 
 - name: "{{ user_item.local_user }} | Warn if no keys found"
   ansible.builtin.debug:
-    msg: "WARNING: No SSH keys found for GitHub user {{ user_item.github_user }}"
-  when: github_keys_response.status != 200 or github_keys_response.content | length == 0
+    msg: "WARNUNG: Kein Schluessel fuer {{ user_item.local_user }} — weder bei GitHub ({{ user_item.github_user }}) noch im Cockpit. Das Konto entsteht ohne Zugang."
+  when: managed_keys | length == 0
   tags: [ssh_keys]
