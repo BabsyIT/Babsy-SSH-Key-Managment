@@ -1,16 +1,9 @@
 name: Deploy Users to Hosts
 
 on:
-  # Trigger when M365 sync updates users
+  # Vom Cockpit ausgelöst, wenn sich Benutzer oder Hosts geändert haben
   repository_dispatch:
     types: [users-updated]
-
-  # Trigger on user-mapping.json changes
-  push:
-    branches:
-      - main
-    paths:
-      - 'config/user-mapping.json'
 
   # Manual trigger
   workflow_dispatch:
@@ -59,21 +52,45 @@ jobs:
           echo "Key fingerprint:"
           ssh-keygen -l -f ~/.ssh/deploy_key || echo "WARNING: Could not read key fingerprint"
 
-      - name: Restore Ansible Inventory from Secret
+      # Inventar und Benutzerliste kommen aus dem Cockpit — dort werden sie
+      # gepflegt. Die Secrets sind ein vom Cockpit geschriebenes Abbild und
+      # dienen nur als Rückfallebene, falls das Cockpit gerade nicht erreichbar
+      # ist (Deploy, Wartung). Beide stammen aus derselben Datenbank, können
+      # also nicht inhaltlich auseinanderlaufen — nur im Alter.
+      - name: Inventar und Benutzer laden (Cockpit, sonst Secret)
         env:
+          COCKPIT_URL: ${{ vars.COCKPIT_URL || 'https://cockpit.test.babsy.ch' }}
+          SSH_API_TOKEN: ${{ secrets.SSH_API_TOKEN }}
           ANSIBLE_INVENTORY_CONTENT: ${{ secrets.ANSIBLE_INVENTORY }}
-        run: |
-          mkdir -p ansible/inventory
-          printf '%s\n' "$ANSIBLE_INVENTORY_CONTENT" > ansible/inventory/hosts.yml
-          echo "✓ Ansible inventory restored"
-
-      - name: Restore user-mapping.json from Secret
-        env:
           USER_MAPPING_CONTENT: ${{ secrets.USER_MAPPING_JSON }}
         run: |
-          mkdir -p config
-          printf '%s\n' "$USER_MAPPING_CONTENT" > config/user-mapping.json
-          echo "✓ User mapping restored"
+          mkdir -p ansible/inventory config
+
+          fetch() {   # $1 = Pfad, $2 = Zieldatei
+            [ -n "$SSH_API_TOKEN" ] || return 1
+            curl -fsS --max-time 20 \
+              -H "Authorization: Bearer $SSH_API_TOKEN" \
+              "$COCKPIT_URL$1" -o "$2"
+          }
+
+          if fetch /api/ssh/inventory ansible/inventory/hosts.yml; then
+            echo "✓ Inventar vom Cockpit"
+          else
+            printf '%s\n' "$ANSIBLE_INVENTORY_CONTENT" > ansible/inventory/hosts.yml
+            echo "⚠ Cockpit nicht erreichbar — Inventar aus Secret (moeglicherweise veraltet)"
+          fi
+
+          if fetch /api/ssh/user-mapping config/user-mapping.json; then
+            echo "✓ Benutzerliste vom Cockpit"
+          else
+            printf '%s\n' "$USER_MAPPING_CONTENT" > config/user-mapping.json
+            echo "⚠ Cockpit nicht erreichbar — Benutzerliste aus Secret (moeglicherweise veraltet)"
+          fi
+
+          # Leeres Inventar oder leere Benutzerliste wuerden einen Lauf ohne
+          # Wirkung erzeugen, der als Erfolg gemeldet wird. Lieber hier scheitern.
+          test -s ansible/inventory/hosts.yml || { echo "Inventar ist leer"; exit 1; }
+          test -s config/user-mapping.json   || { echo "Benutzerliste ist leer"; exit 1; }
 
       - name: Verify user-mapping.json exists
         run: |
@@ -109,8 +126,15 @@ jobs:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
           ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/deploy_key
         run: |
+          # Denselben Umgebungsfilter wie im echten Lauf anwenden — sonst prüft
+          # der Probelauf alle Hosts und sagt etwas anderes voraus, als danach
+          # tatsächlich passiert.
+          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+          [ "$TARGET" = "all" ] && LIMIT_FLAG="" || LIMIT_FLAG="--limit ${TARGET}"
+
           ansible-playbook \
             -i inventory/hosts.yml \
+            ${LIMIT_FLAG} \
             --check \
             --diff \
             -v \
