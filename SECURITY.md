@@ -7,7 +7,6 @@
 ## ❌ What NOT to Commit
 
 ### Forbidden Files (Already in .gitignore)
-- `config/m365-config.json` - M365 credentials
 - `*.env` files - Environment files with secrets
 - `*.key`, `*.pem` - Private keys
 - Any file containing passwords, tokens, or secrets
@@ -18,7 +17,6 @@
 ```yaml
 # In GitHub Actions Workflow
 env:
-  M365_CLIENT_SECRET: ${{ secrets.M365_CLIENT_SECRET }}
 ```
 
 ❌ **WRONG:** Commit secrets to repository
@@ -35,11 +33,6 @@ env:
 All sensitive data is stored in **GitHub Secrets** (Repository → Settings → Secrets):
 
 **Required Secrets:**
-- `M365_TENANT_ID` - Microsoft 365 Tenant ID
-- `M365_CLIENT_ID` - Azure AD App Client ID
-- `M365_CLIENT_SECRET` - Azure AD App Client Secret ⚠️
-- `M365_IT_GROUP_NAME` - IT-Team group name
-- `M365_GITHUB_USERNAME_FIELD` - Extension attribute field
 - `ANSIBLE_SSH_PRIVATE_KEY` - SSH private key for Ansible ⚠️
 - `ANSIBLE_TARGET_HOSTS` - Target hosts list
 
@@ -65,15 +58,13 @@ Example files (`*.example`) are safe to commit:
 
 1. **Rotate ALL compromised secrets immediately**
    ```bash
-   # Azure AD App Secret
-   Azure Portal → App registrations → Certificates & secrets → New secret
-
-   # Update GitHub Secret
-   Repository → Settings → Secrets → Update M365_CLIENT_SECRET
-
-   # SSH Keys
+   # SSH Deploy-Schlüssel erneuern
    ssh-keygen -t ed25519 -f ~/.ssh/new_key
-   # Deploy to hosts and update ANSIBLE_SSH_PRIVATE_KEY
+   # Auf die Hosts ausrollen, dann ANSIBLE_SSH_PRIVATE_KEY aktualisieren
+
+   # API-Token des Cockpits erneuern
+   openssl rand -hex 32
+   # In der .env des Cockpits und als Secret SSH_API_TOKEN eintragen
    ```
 
 2. **Remove secret from Git history**
@@ -115,21 +106,6 @@ Example files (`*.example`) are safe to commit:
 
 ### Development & Testing
 
-**For local development:**
-```bash
-# Create .env file (git-ignored)
-cat > .env <<EOF
-M365_TENANT_ID=your-test-tenant
-M365_CLIENT_ID=your-test-client-id
-M365_CLIENT_SECRET=your-test-secret
-EOF
-
-# Load environment variables
-export $(cat .env | xargs)
-
-# Run tests
-python3 scripts/m365-user-sync.py
-```
 
 **NEVER commit `.env` files!**
 

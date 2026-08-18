@@ -1,0 +1,175 @@
+---
+# Zugang einer Person auf diesem Host entziehen.
+#
+# Aufgerufen fuer zwei Faelle: im Cockpit deaktivierte Konten (revoked_users)
+# und Personen, die zwar aktiv sind, aber fuer diesen Host nicht freigegeben.
+#
+# Zwei Haerten, je nach Herkunft des Kontos:
+#
+#   * Vom Cockpit angelegt  -> vollstaendig geloescht, samt Home-Verzeichnis
+#     und allen Daten. Diese Konten gehoeren der Verwaltung; was darin liegt,
+#     ist Arbeitsmaterial einer Person, die keinen Zugang mehr haben soll.
+#
+#   * Handgemacht           -> gesperrt, Schluessel und Sudo-Regel entfernt,
+#     Daten bleiben. An solchen Konten haengen erfahrungsgemaess Dienste,
+#     Cronjobs und Deploy-Schluessel; ein Loeschen braeche sie stillschweigend.
+#
+# WICHTIG — warum nicht "passwd -l": Ein gesperrtes Passwort blockiert nur die
+# Passwort-Anmeldung. Mit einem SSH-Schluessel kaeme die Person weiter herein.
+# Wirksam ist das Ablaufdatum des Kontos; zusaetzlich werden beide
+# authorized_keys-Dateien entfernt, auch die sonst unangetastete manuelle.
+
+# ---------------------------------------------------------------------------
+# Schutzriegel — muss vor allem anderen stehen
+# ---------------------------------------------------------------------------
+
+- name: "{{ revoke_user }} | GESCHUETZTES KONTO — wird nicht angefasst"
+  ansible.builtin.debug:
+    msg: >-
+      ABGEWIESEN: {{ revoke_user }} steht unter Schutz und wird nicht entzogen.
+      Steht dieser Name in der Benutzerliste, stimmt etwas mit den Daten nicht.
+  when: revoke_user in protected_users
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Pruefen, ob das Konto hier existiert"
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ revoke_user }}"
+    fail_key: false
+  register: revoke_passwd
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Merkzettel der verwalteten Konten lesen"
+  ansible.builtin.slurp:
+    src: "{{ managed_users_file }}"
+  register: revoke_registry
+  failed_when: false
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Herkunft und Vorgehen bestimmen"
+  ansible.builtin.set_fact:
+    # Zweiter Riegel: Systemkonten (UID < 1000) bleiben unangetastet, auch wenn
+    # ihr Name nicht in protected_users steht.
+    revoke_exists: >-
+      {{ revoke_passwd.ansible_facts.getent_passwd[revoke_user] is defined
+         and (revoke_passwd.ansible_facts.getent_passwd[revoke_user][1] | int) > protected_uid_max
+         and revoke_user not in protected_users }}
+    revoke_hard: >-
+      {{ remove_revoked_accounts | default(false)
+         or revoke_user in ((revoke_registry.content | default('') | b64decode).split('\n') | select | list) }}
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Nichts zu tun"
+  ansible.builtin.debug:
+    msg: "Kein Konto {{ revoke_user }} auf {{ inventory_hostname }} — nichts zu entziehen."
+  when: not revoke_exists
+  tags: [revoke]
+
+# Auch beim harten Loeschen: Die Schluessel werden vorher gesichert. Wer
+# versehentlich den Falschen entzieht, soll den Zugang wiederherstellen koennen,
+# ohne jede Person neu einsammeln zu muessen.
+- name: "{{ revoke_user }} | Schluesseldateien sichern"
+  ansible.builtin.copy:
+    src: "{{ user_home_base }}/{{ revoke_user }}/.ssh/{{ item }}"
+    dest: "{{ backup_dir }}/revoked_{{ revoke_user }}_{{ item }}_{{ ansible_date_time.epoch }}"
+    remote_src: true
+    mode: '0600'
+  loop:
+    - authorized_keys
+    - authorized_keys_github
+  when:
+    - create_backups
+    - revoke_exists
+  ignore_errors: true
+  tags: [revoke, backup]
+
+- name: "{{ revoke_user }} | Sudo-Regel entfernen"
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ revoke_user }}"
+    state: absent
+  when: revoke_exists   # schliesst geschuetzte Konten mit ein
+  tags: [revoke, sudo]
+
+# ---------------------------------------------------------------------------
+# Vom Cockpit angelegt: vollstaendig entfernen
+# ---------------------------------------------------------------------------
+
+- name: "{{ revoke_user }} | Laufende Prozesse des Kontos beenden"
+  ansible.builtin.command: "pkill -KILL -u {{ revoke_user }}"
+  register: revoke_pkill
+  changed_when: revoke_pkill.rc == 0
+  failed_when: revoke_pkill.rc not in [0, 1]   # 1 = kein Prozess vorhanden
+  when:
+    - revoke_exists
+    - revoke_hard
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Konto samt Home-Verzeichnis und Daten loeschen"
+  ansible.builtin.user:
+    name: "{{ revoke_user }}"
+    state: absent
+    remove: true      # userdel --remove: Home-Verzeichnis und Mail-Spool
+    force: true
+  when:
+    - revoke_exists
+    - revoke_hard
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Cronjobs des Kontos entfernen"
+  ansible.builtin.file:
+    path: "/var/spool/cron/crontabs/{{ revoke_user }}"
+    state: absent
+  when:
+    - revoke_exists
+    - revoke_hard
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Aus dem Merkzettel streichen"
+  ansible.builtin.lineinfile:
+    path: "{{ managed_users_file }}"
+    line: "{{ revoke_user }}"
+    state: absent
+  when:
+    - revoke_exists
+    - revoke_hard
+  tags: [revoke]
+
+# ---------------------------------------------------------------------------
+# Handgemachtes Konto: sperren, Daten behalten
+# ---------------------------------------------------------------------------
+
+- name: "{{ revoke_user }} | Schluessel entfernen"
+  ansible.builtin.file:
+    path: "{{ user_home_base }}/{{ revoke_user }}/.ssh/{{ item }}"
+    state: absent
+  loop:
+    - authorized_keys
+    - authorized_keys_github
+  when:
+    - revoke_exists
+    - not revoke_hard
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Konto ablaufen lassen und Shell sperren"
+  ansible.builtin.user:
+    name: "{{ revoke_user }}"
+    expires: 1          # 1970-01-02, liegt sicher in der Vergangenheit
+    shell: /usr/sbin/nologin
+    password_lock: true
+  when:
+    - revoke_exists
+    - not revoke_hard
+  tags: [revoke]
+
+- name: "{{ revoke_user }} | Entzug protokollieren"
+  ansible.builtin.lineinfile:
+    path: "{{ log_dir }}/ssh_keys.log"
+    line: >-
+      {{ ansible_date_time.iso8601 }} - ENTZOGEN: {{ revoke_user }} auf
+      {{ inventory_hostname }} ({{ 'geloescht samt Daten' if revoke_hard else 'gesperrt, Daten behalten' }})
+    create: true
+    mode: '0644'
+  when:
+    - enable_logging
+    - revoke_exists
+  tags: [revoke, logging]

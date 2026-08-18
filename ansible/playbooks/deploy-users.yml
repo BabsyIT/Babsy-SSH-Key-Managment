@@ -12,7 +12,9 @@
       ansible.builtin.debug:
         msg:
           - "Deploying to host: {{ inventory_hostname }}"
-          - "Environment: {{ environment | default('not specified') }}"
+          # host_environment statt environment: In Ansible ist `environment`
+          # ein reserviertes Schlüsselwort für Prozess-Umgebungsvariablen.
+          - "Environment: {{ host_environment | default('not specified') }}"
           - "Timestamp: {{ ansible_date_time.iso8601 }}"
 
     - name: Verify user mapping file exists

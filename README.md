@@ -1,243 +1,91 @@
-# SSH Key Management System
+# SSH Key Management
 
-🔑 Automatisierte SSH-Key und Benutzer-Verwaltung für Debian/Ubuntu-Systeme über GitHub Actions und Microsoft 365.
+Zentrale Benutzer- und Schlüsselverwaltung für alle Babsy-Server: Konten
+anlegen, SSH-Keys von GitHub importieren, Sudo-Rechte setzen — und beim
+Austritt überall wieder entfernen. Der Entzug ist der eigentliche Zweck.
 
-## 🎯 Production Deployment (Empfohlen)
+## Wie es funktioniert
 
-**Verwenden Sie GitHub Actions + Ansible für Production:**
-
-📖 **[PRODUCTION-DEPLOYMENT.md](PRODUCTION-DEPLOYMENT.md)** - Complete Production Setup Guide (30 minutes)
-
-```
-Microsoft 365 → GitHub Actions (M365 Sync) → user-mapping.json
-                             ↓
-            GitHub Actions (Ansible) → All Debian Hosts
-```
-
-## ✨ Features
-
-- ✅ **Microsoft 365 Integration** - Automatischer User-Sync aus IT-Team Gruppe
-- ✅ **GitHub Actions Orchestration** - Zentrale Verwaltung (99.9% verfügbar)
-- ✅ **Ansible Deployment** - Simultane Verwaltung aller Hosts
-- ✅ **Automatische GitHub Issues** - Bei Fehlern werden Issues erstellt
-- ✅ **SSH Key Import** - Von GitHub pro User
-- ✅ **Sudo Management** - Full/Limited/None per User
-- ✅ **Stündliche M365 Sync** - Immer aktuell
-- ✅ **Täglich Backup-Deployment** - Fehlertoleranz
-
-## 🚀 Quick Start (30 Minuten)
-
-```bash
-# 1. Azure AD App erstellen
-# Siehe: PRODUCTION-DEPLOYMENT.md → Step 1
-
-# 2. GitHub Secrets konfigurieren
-# Repository → Settings → Secrets → Actions
-# Siehe: SETUP-GITHUB-SECRETS.md
-
-# 3. Extension Attributes in M365 setzen
-# PowerShell: Set-AzureADUser -ObjectId "user@babsy.chh" -ExtensionAttribute1 "github-username"
-
-# 4. Ansible Inventory konfigurieren
-# Editiere: ansible/inventory/hosts.yml
-
-# 5. SSH Keys deployen
-ssh-keygen -t ed25519 -C "ansible@babsy" -f ~/.ssh/babsy_ansible_key
-ssh-copy-id -i ~/.ssh/babsy_ansible_key.pub root@host1.babsy.local
-
-# 6. Testen
-gh workflow run m365-sync.yml
-gh workflow run deploy-users.yml -f dry_run=true
-```
-
-## 📚 Dokumentation
-
-### 📖 GitHub Wiki
-- **[Wiki Home](https://github.com/BabsyIT/Babsy-SSH-Key-Managment/wiki)** - Umfassende Dokumentation
-- **[Production Deployment Guide](https://github.com/BabsyIT/Babsy-SSH-Key-Managment/wiki/Production-Deployment)** - 30-Min Setup
-- **[Troubleshooting](https://github.com/BabsyIT/Babsy-SSH-Key-Managment/wiki/Troubleshooting)** - Problemlösung
-
-**Wiki Setup:** Führe `./scripts/populate-wiki.sh` aus, um das Wiki zu befüllen (siehe [docs/wiki/SETUP-INSTRUCTIONS.md](docs/wiki/SETUP-INSTRUCTIONS.md))
-
-### Production Setup
-- **[PRODUCTION-DEPLOYMENT.md](PRODUCTION-DEPLOYMENT.md)** ⭐ - **START HERE** für Production
-- **[GITHUB-ACTIONS-SETUP.md](GITHUB-ACTIONS-SETUP.md)** - Detaillierte GitHub Actions Anleitung
-- **[SETUP-GITHUB-SECRETS.md](SETUP-GITHUB-SECRETS.md)** - GitHub Secrets Konfiguration
-- **[ansible/README.md](ansible/README.md)** - Ansible Playbooks & Roles
-
-### Reference Only (NOT for Production)
-- **[scripts/README.md](scripts/README.md)** - ⚠️ Referenz-Scripts (nicht für Production!)
-- **[install.sh.legacy](install.sh.legacy)** - ⚠️ Legacy Installer (nicht für Production!)
-
-## 🏗️ Architektur
-
-### Production Architecture (GitHub Actions + Ansible)
+Gepflegt wird alles im **Management Cockpit**, nicht in diesem Repository.
 
 ```
-┌─────────────────────────────────────────┐
-│     Microsoft 365 (babsy.chh)           │
-│           IT-Team Group                 │
-│    (extensionAttribute1 = GitHub)       │
-└─────────────────────────────────────────┘
-                  │
-                  │ Microsoft Graph API
-                  ▼
-┌─────────────────────────────────────────┐
-│   GitHub Actions: M365 Sync (Hourly)    │
-│   .github/workflows/m365-sync.yml       │
-└─────────────────────────────────────────┘
-                  │
-                  │ Updates user-mapping.json
-                  ▼
-┌─────────────────────────────────────────┐
-│  GitHub Actions: Ansible Deploy         │
-│  .github/workflows/deploy-users.yml     │
-└─────────────────────────────────────────┘
-                  │
-                  │ SSH (Ansible)
-                  ▼
-┌─────────────────────────────────────────┐
-│      All Debian/Ubuntu Hosts            │
-│  • User Creation                        │
-│  • SSH Keys from GitHub                 │
-│  • Sudo Configuration                   │
-│  • Group Management                     │
-└─────────────────────────────────────────┘
+Cockpit (Admin → SSH-Keys / SSH-Hosts)
+   │   Personen kommen aus Entra ID, GitHub-Konto und Sudo-Stufe je Person
+   │
+   ├─→ GET /api/ssh/inventory      ─┐  primär: direkt abgefragt
+   ├─→ GET /api/ssh/user-mapping   ─┤
+   │                                │
+   └─→ Secrets ANSIBLE_INVENTORY /  ┘  Rückfallebene, vom Cockpit geschrieben
+       USER_MAPPING_JSON
+                    │
+                    ↓
+     GitHub Actions „Deploy Users to Hosts"
+                    │
+                    ↓
+     Ansible-Rolle ssh_user_management (je Host)
+       • Konto, Gruppen, Shell
+       • Keys von github.com/<user>.keys
+       • /etc/sudoers.d/<user>
+       • sshd-Härtung
 ```
 
-## 🔧 Workflows
+Beide Wege stammen aus derselben Datenbank; die Secrets sind ein Abbild, das
+das Cockpit bei jeder Änderung neu schreibt. Sie können nicht inhaltlich
+auseinanderlaufen, nur im Alter — deshalb wird zuerst das Cockpit gefragt.
 
-### M365 User Sync
-- **File:** `.github/workflows/m365-sync.yml`
-- **Schedule:** Every hour at :00
-- **Triggers:** Schedule, Manual, Push
-- **Function:** Syncs IT-Team from M365 → Creates/updates user-mapping.json
+## Etwas ändern
 
-### Ansible Deployment
-- **File:** `.github/workflows/deploy-users.yml`
-- **Schedule:** Daily at 6:00 UTC (backup)
-- **Triggers:** user-mapping.json change, Schedule, Manual
-- **Function:** Deploys users to all Debian hosts via Ansible
+| Ziel | Wo |
+|---|---|
+| Person hinzufügen/entfernen, Sudo-Stufe ändern | Cockpit → Admin → SSH-Keys |
+| Server hinzufügen/entfernen | Cockpit → Admin → SSH-Hosts |
+| Eigenen GitHub-Benutzernamen ändern | Cockpit → Einstellungen → Server-Zugang |
+| Ausrollen | Cockpit stösst den Workflow an, oder hier „Run workflow" |
 
-## 📊 Monitoring
+**Nicht** in diesem Repository bearbeitet werden: `ansible/inventory/hosts.yml`
+(wird zur Laufzeit erzeugt) und `config/user-mapping.json` (dito). Beide sind
+git-ignoriert.
 
-### GitHub Actions
+## Manuell ausrollen
 
-```bash
-# View workflow runs
-gh run list
+Actions → **Deploy Users to Hosts** → *Run workflow*:
 
-# Watch M365 sync
-gh run watch --workflow=m365-sync.yml
+- `target_environment`: `all`, `production`, `staging` oder `development`
+- `dry_run`: `true` zeigt nur an, was sich ändern würde — ohne etwas zu tun
 
-# Watch deployment
-gh run watch --workflow=deploy-users.yml
+Ein Probelauf ist der richtige erste Schritt, wenn länger nicht ausgerollt
+wurde: Er zeigt die Differenz zwischen Soll und Ist, bevor sie angewandt wird.
 
-# View issues (auto-created on failures)
-gh issue list --label "automation"
-```
+## Neuen Host aufnehmen
 
-### Automatic Error Handling
+1. Cockpit → Admin → Infrastruktur zeigt alle Server aus der Hetzner-API und
+   markiert die, die hier noch nicht verwaltet werden. „Übernehmen" trägt sie
+   in die Hostliste ein.
+2. Auf dem Host muss der Benutzer `ansible` samt Deploy-Key bestehen. Bei einem
+   neuen Server erledigt das die Cloud-Config aus dem Cockpit; bei einem
+   bestehenden `scripts/setup-host.sh`.
+3. Workflow laufen lassen.
 
-Bei Fehlern werden automatisch Issues erstellt:
-- 🚨 **M365 User Sync Failed** - M365 connection/sync issues
-- ⚠️ **Ansible User Deployment Failed** - Deployment errors
+## Erforderliche Secrets
 
-Issues enthalten:
-- Detaillierte Fehleranalyse
-- Mögliche Ursachen
-- Troubleshooting Steps
-- Quick-Fix Commands
-- Links zu Logs
+| Secret | Zweck |
+|---|---|
+| `ANSIBLE_SSH_PRIVATE_KEY` | Privater Schlüssel des `ansible`-Benutzers |
+| `SSH_API_TOKEN` | Zugriff auf `/api/ssh/*` im Cockpit |
+| `ANSIBLE_INVENTORY` | Rückfall-Inventar (schreibt das Cockpit) |
+| `USER_MAPPING_JSON` | Rückfall-Benutzerliste (schreibt das Cockpit) |
 
-## 🎯 Warum GitHub Actions + Ansible?
+Variable `COCKPIT_URL` setzen, falls das Cockpit nicht unter
+`https://cockpit.test.babsy.ch` erreichbar ist.
 
-| Kriterium | GitHub Actions + Ansible | Lokale Scripts |
-|-----------|-------------------------|----------------|
-| **Hochverfügbarkeit** | ✅ 99.9% (GitHub) | ❌ Host-abhängig |
-| **Zentrale Orchestrierung** | ✅ Ja | ❌ Nein |
-| **Alle Hosts gleichzeitig** | ✅ Ja | ❌ Einzeln |
-| **Fehler-Monitoring** | ✅ Auto-Issues | ❌ Logs nur lokal |
-| **Rollback** | ✅ Git-basiert | ❌ Manuell |
-| **Audit Trail** | ✅ Vollständig | ❌ Begrenzt |
-| **Setup-Komplexität** | ⚠️ Mittel | ✅ Einfach |
-| **Skalierbarkeit** | ✅ Exzellent | ❌ Begrenzt |
+## Was hier nicht mehr steht
 
-## 🔒 Sicherheit
+Bis August 2026 enthielt dieses Repository zwei ältere Generationen: einen
+M365-Sync, der Benutzer selbst aus Entra holte und in eine Datei im Repo
+schrieb, sowie einen Satz lokaler Skripte mit systemd-Timern. Beide waren
+stillgelegt, wurden aber weiterhin als Hauptweg dokumentiert — der M365-Sync
+hätte seine Ergebnisse beim nächsten Deploy sogar stillschweigend überschrieben
+bekommen. Sie sind entfernt; die Historie bleibt in Git erhalten.
 
-- ✅ **GitHub Secrets** für alle sensiblen Daten (M365 credentials, SSH keys)
-- ✅ **Least Privilege** API Permissions (nur notwendige Rechte)
-- ✅ **SSH Key Authentication** (keine Passwörter)
-- ✅ **Sudoers Validation** (visudo syntax check vor Deployment)
-- ✅ **Automatische Backups** vor jeder Änderung
-- ✅ **Complete Audit Trail** (alle Actions geloggt)
-
-## 🚨 Troubleshooting
-
-### M365 Sync schlägt fehl
-
-```bash
-# Check GitHub Secrets
-Settings → Secrets and variables → Actions
-# Verify: M365_TENANT_ID, M365_CLIENT_ID, M365_CLIENT_SECRET
-
-# Check Azure AD Permissions
-Azure Portal → App registrations → API permissions
-# Verify admin consent granted for User.Read.All, Group.Read.All, Directory.Read.All
-
-# Test connection
-# See SETUP-GITHUB-SECRETS.md for test script
-
-# View workflow logs
-gh run view --workflow=m365-sync.yml --log
-```
-
-### Ansible Deployment schlägt fehl
-
-```bash
-# Test SSH connectivity
-ssh -i ~/.ssh/babsy_ansible_key root@host1.babsy.local "hostname"
-
-# Test Ansible ping
-cd ansible
-ansible -i inventory/hosts.yml debian_hosts -m ping
-
-# Check inventory
-cat ansible/inventory/hosts.yml
-
-# Validate user-mapping.json
-jq '.' config/user-mapping.json
-
-# View workflow logs
-gh run view --workflow=deploy-users.yml --log
-```
-
-## 🤝 Support
-
-- **Production Setup:** [PRODUCTION-DEPLOYMENT.md](PRODUCTION-DEPLOYMENT.md)
-- **Issues:** [GitHub Issues](../../issues)
-- **Workflow Logs:** [GitHub Actions](../../actions)
-- **Discussions:** [Community Forum](../../discussions)
-
-## 📄 Lizenz
-
-MIT License - siehe [LICENSE](LICENSE) für Details.
-
----
-
-## ⚠️ Important Notes
-
-### Scripts Directory
-
-Die Scripts in `scripts/` sind **NICHT für Production** gedacht. Sie dienen nur als Referenz.
-
-**Für Production verwenden Sie:**
-- ✅ GitHub Actions + Ansible (siehe [PRODUCTION-DEPLOYMENT.md](PRODUCTION-DEPLOYMENT.md))
-
-**NICHT verwenden:**
-- ❌ Lokale Scripts aus `scripts/`
-- ❌ `install.sh.legacy`
-
----
-
-**→ [START HERE: PRODUCTION-DEPLOYMENT.md](PRODUCTION-DEPLOYMENT.md) für Production Setup**
+Die Personen kommen weiterhin aus Entra ID — nur eben über das Cockpit, das
+diese Synchronisation ohnehin betreibt.

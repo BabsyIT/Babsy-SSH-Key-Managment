@@ -1,5 +1,18 @@
 ---
 # Task file to manage individual user
+#
+# Geschuetzte Konten (root, ansible, Systemkonten) werden hier gar nicht erst
+# verarbeitet: Ein Eintrag mit dem Namen root wuerde sonst dessen Shell, Gruppen
+# und Schluessel ueberschreiben.
+
+- name: "{{ user_item.local_user }} | GESCHUETZTES KONTO — uebersprungen"
+  ansible.builtin.debug:
+    msg: >-
+      ABGEWIESEN: {{ user_item.local_user }} steht unter Schutz und wird nicht
+      verwaltet. Steht dieser Name in der Benutzerliste, stimmt etwas mit den
+      Daten nicht.
+  when: user_item.local_user in protected_users
+  tags: [users]
 
 - name: "{{ user_item.local_user }} | Check if user exists"
   ansible.builtin.getent:
@@ -17,6 +30,18 @@
     home: "{{ user_home_base }}/{{ user_item.local_user }}"
     create_home: true
     state: present
+  when: user_exists.ansible_facts.getent_passwd is not defined or user_exists.ansible_facts.getent_passwd[user_item.local_user] is not defined
+  tags: [users, create]
+
+# Merkzettel, welche Konten diese Rolle selbst angelegt hat. Nur diese werden
+# beim Entzug vollstaendig geloescht — handgemachte Konten mit womoeglich
+# wichtigen Home-Verzeichnissen werden lediglich gesperrt.
+- name: "{{ user_item.local_user }} | Als vom Cockpit angelegt vermerken"
+  ansible.builtin.lineinfile:
+    path: "{{ managed_users_file }}"
+    line: "{{ user_item.local_user }}"
+    create: true
+    mode: '0644'
   when: user_exists.ansible_facts.getent_passwd is not defined or user_exists.ansible_facts.getent_passwd[user_item.local_user] is not defined
   tags: [users, create]
 

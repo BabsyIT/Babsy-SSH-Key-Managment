@@ -38,18 +38,53 @@
     user_config: "{{ lookup('file', user_mapping_file) | from_json }}"
   tags: [always]
 
+# Eine Person ohne `hosts`-Feld darf ueberall — so bleibt der Bestand
+# unveraendert, solange im Cockpit keine Einschraenkung gesetzt ist.
+- name: Zugriff fuer diesen Host aufteilen
+  ansible.builtin.set_fact:
+    users_here: >-
+      {{ user_config.users
+         | selectattr('hosts', 'undefined')
+         | list
+         + (user_config.users
+            | selectattr('hosts', 'defined')
+            | selectattr('hosts', 'contains', inventory_hostname)
+            | list) }}
+    users_not_here: >-
+      {{ user_config.users
+         | selectattr('hosts', 'defined')
+         | rejectattr('hosts', 'contains', inventory_hostname)
+         | map(attribute='local_user')
+         | list }}
+  tags: [always]
+
 - name: Display user count
   ansible.builtin.debug:
-    msg: "Managing {{ user_config.users | length }} users"
+    msg: >-
+      {{ users_here | length }} Benutzer fuer {{ inventory_hostname }},
+      {{ users_not_here | length }} hier nicht freigegeben,
+      {{ user_config.revoked_users | default([]) | length }} deaktiviert
   tags: [always]
 
 - name: Process each user
   ansible.builtin.include_tasks: manage_user.yml
-  loop: "{{ user_config.users }}"
+  loop: "{{ users_here }}"
   loop_control:
     loop_var: user_item
     label: "{{ user_item.local_user }}"
   tags: [users]
+
+# Der Entzug ist der eigentliche Zweck dieser Verwaltung — und fand bis August
+# 2026 nicht statt: Die Rolle verarbeitete nur, was in der Liste stand, und ein
+# fehlender Eintrag war fuer sie kein Auftrag. Konten Ausgeschiedener blieben
+# damit auf jedem Server bestehen.
+- name: Zugang entziehen — deaktivierte Personen und hier nicht Freigegebene
+  ansible.builtin.include_tasks: revoke_user.yml
+  loop: "{{ (user_config.revoked_users | default([])) + users_not_here }}"
+  loop_control:
+    loop_var: revoke_user
+    label: "{{ revoke_user }}"
+  tags: [users, revoke]
 
 - name: Create deployment log entry
   ansible.builtin.lineinfile:

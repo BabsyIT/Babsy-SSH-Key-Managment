@@ -1,48 +1,26 @@
-# ⚠️ Scripts Directory - Reference Only
+# Scripts
 
-Diese Scripts sind **NICHT für Production** gedacht. Sie dienen nur als Referenz und für lokale Tests.
+## `setup-host.sh`
 
-## 🚨 Production Deployment
+Richtet auf einem bestehenden Server den Benutzer `ansible` samt Deploy-Key
+ein, damit die Automatik ihn übernehmen kann. Einmal pro Host nötig — und nur
+dort, wo die Maschine nicht ohnehin mit einer Cloud-Config aus dem Cockpit
+erstellt wurde.
 
-**Verwenden Sie für Production:**
-- ✅ **GitHub Actions + Ansible** (siehe [PRODUCTION-DEPLOYMENT.md](../PRODUCTION-DEPLOYMENT.md))
+```bash
+sudo ./setup-host.sh
+```
 
-**NICHT verwenden:**
-- ❌ Diese lokalen Scripts für Production
+## `populate-wiki.sh`
 
-## 📁 Inhalt (Reference Only)
-
-- `m365-user-sync.py` - M365 User Synchronisation (Referenz)
-- `m365-sync-wrapper.sh` - Wrapper für M365 Sync (Referenz)
-- `github-ssh-user-manager.sh` - User Management Script (Referenz)
-- `github-ssh-key-manager.sh` - SSH Key Management Script (Referenz)
-
-## 🧪 Verwendungszweck
-
-Diese Scripts können verwendet werden für:
-- 📚 **Lernzwecke** - Verstehen wie M365 Integration funktioniert
-- 🧪 **Lokale Tests** - Testen von M365 Verbindungen
-- 🔧 **Debugging** - Troubleshooting bei Problemen
-- 📝 **Referenz** - Beispielimplementierung
-
-## ❌ Warum NICHT für Production?
-
-| Faktor | Lokale Scripts | GitHub Actions + Ansible |
-|--------|---------------|-------------------------|
-| **Hochverfügbarkeit** | ❌ Host-abhängig | ✅ 99.9% (GitHub) |
-| **Zentrale Verwaltung** | ❌ Auf jedem Host einzeln | ✅ Zentral orchestriert |
-| **Fehlerbehandlung** | ❌ Logs nur lokal | ✅ Auto-Issues in GitHub |
-| **Audit Trail** | ❌ Schwer nachvollziehbar | ✅ Komplette Historie |
-| **Rollback** | ❌ Manuell | ✅ Git-basiert |
-| **Skalierung** | ❌ Manuell auf jedem Host | ✅ Automatisch auf allen Hosts |
-
-## 🚀 Production Setup
-
-Für Production-Deployment siehe:
-- **[PRODUCTION-DEPLOYMENT.md](../PRODUCTION-DEPLOYMENT.md)** - Komplette Setup-Anleitung
-- **[GITHUB-ACTIONS-SETUP.md](../GITHUB-ACTIONS-SETUP.md)** - GitHub Actions Details
-- **[ansible/README.md](../ansible/README.md)** - Ansible Dokumentation
+Befüllt das Wiki mit der Dokumentation dieses Repositories. Unabhängig vom
+Ausrollen.
 
 ---
 
-**⚠️ Warnung:** Diese Scripts sollten NICHT in Production-Umgebungen verwendet werden!
+Die früheren Skripte für M365-Sync und lokale Benutzerverwaltung wurden im
+August 2026 entfernt: Sie waren als „Reference Only" markiert, wurden von
+nichts mehr aufgerufen und beschrieben einen Ablauf, den es nicht mehr gibt.
+Benutzer und Hosts werden im Management Cockpit gepflegt, das Ausrollen
+übernimmt `.github/workflows/deploy-users.yml` mit Ansible. Die alten Stände
+bleiben in der Git-Historie.
