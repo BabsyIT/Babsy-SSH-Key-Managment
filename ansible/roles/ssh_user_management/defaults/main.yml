@@ -18,4 +18,23 @@ backup_dir: /var/backups/ssh-user-management
 
 # Logging
 enable_logging: true
+
+# Konten, die diese Rolle unter keinen Umstaenden anfasst — weder anlegen noch
+# aendern noch entziehen. root steht hier zuerst: Ein fehlerhafter Eintrag mit
+# diesem Namen wuerde den Zugang zu jedem Server vernichten. Zusaetzlich schuetzt
+# die Rolle jedes Konto mit einer UID unter 1000 (Systemkonten).
+protected_users:
+  - root
+  - ansible      # der Deploy-Zugang selbst
+  - sync
+  - nobody
+protected_uid_max: 999
+
+# Merkzettel der von dieser Rolle angelegten Konten. Beim Entzug werden nur
+# diese vollstaendig geloescht; handgemachte Konten werden nur gesperrt.
+managed_users_file: /var/lib/ssh-user-management/managed-users
+
+# Auf true gesetzt, werden ALLE entzogenen Konten geloescht — auch solche, die
+# nicht von dieser Rolle stammen. Mit Bedacht verwenden.
+remove_revoked_accounts: false
 log_dir: /var/log/ssh-user-management
