@@ -54,10 +54,24 @@ jobs:
           ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "$ANSIBLE_SSH_KEY" > ~/.ssh/deploy_key
+          # Der abschliessende Zeilenumbruch ist Pflicht: OpenSSH liest einen
+          # privaten Schluessel ohne ihn nicht und meldet nur «error in
+          # libcrypto». Vorher stand hier printf '%s' — solange das Secret den
+          # Umbruch selbst mitbrachte, ging es gut. Wer es einmal ueber die
+          # Oberflaeche neu einfuegte, verlor ihn, und ab da erreichte der Lauf
+          # keinen einzigen Server mehr.
+          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+
+          # Hart abbrechen statt warnen. Ein unlesbarer Schluessel fuehrt sonst
+          # zu «Permission denied» auf jedem einzelnen Host — einem Fehlerbild,
+          # das nach einem Rechteproblem auf den Servern aussieht und deshalb
+          # an der falschen Stelle gesucht wird.
           echo "Key fingerprint:"
-          ssh-keygen -l -f ~/.ssh/deploy_key || echo "WARNING: Could not read key fingerprint"
+          if ! ssh-keygen -l -f ~/.ssh/deploy_key; then
+            echo "::error::ANSIBLE_SSH_PRIVATE_KEY ist unbrauchbar — Schluessel neu hinterlegen (vollstaendiger PEM-Block)."
+            exit 1
+          fi
 
       - name: Restore Ansible Inventory from Secret
         # Die Entwicklungsumgebung hat ein eigenes Verzeichnis. Das Test-Cockpit
@@ -140,8 +154,22 @@ jobs:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
           ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/deploy_key
         run: |
+          # Dieselbe Einschraenkung wie beim echten Lauf. Vorher fehlte sie:
+          # Der Trockenlauf ging immer gegen alle Rechner im Inventar, egal was
+          # angefordert war. Damit prueft er nicht, was spaeter geschieht — und
+          # ein Trockenlauf, der etwas anderes tut als der Ernstfall, ist
+          # schlimmer als keiner.
+          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+
+          if [ "$TARGET" = "all" ]; then
+            LIMIT_FLAG=""
+          else
+            LIMIT_FLAG="--limit ${TARGET}"
+          fi
+
           ansible-playbook \
             -i inventory/hosts.yml \
+            ${LIMIT_FLAG} \
             --check \
             --diff \
             -v \
