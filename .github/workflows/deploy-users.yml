@@ -60,20 +60,51 @@ jobs:
           ssh-keygen -l -f ~/.ssh/deploy_key || echo "WARNING: Could not read key fingerprint"
 
       - name: Restore Ansible Inventory from Secret
+        # Die Entwicklungsumgebung hat ein eigenes Verzeichnis. Das Test-Cockpit
+        # schreibt ausschliesslich dieses; produktive Server stehen gar nicht
+        # darin. Ohne die Trennung hinge alles am richtig gesetzten Parameter.
         env:
           ANSIBLE_INVENTORY_CONTENT: ${{ secrets.ANSIBLE_INVENTORY }}
+          ANSIBLE_INVENTORY_TEST: ${{ secrets.ANSIBLE_INVENTORY_TEST }}
         run: |
           mkdir -p ansible/inventory
-          printf '%s\n' "$ANSIBLE_INVENTORY_CONTENT" > ansible/inventory/hosts.yml
-          echo "✓ Ansible inventory restored"
+          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+
+          if [ "$TARGET" = "development" ]; then
+            if [ -z "$ANSIBLE_INVENTORY_TEST" ]; then
+              echo "::error::ANSIBLE_INVENTORY_TEST ist leer — Lauf abgebrochen."
+              echo "Ein leeres Verzeichnis liefe stillschweigend ins Leere."
+              exit 1
+            fi
+            printf '%s\n' "$ANSIBLE_INVENTORY_TEST" > ansible/inventory/hosts.yml
+            echo "✓ Ansible inventory restored (Entwicklung)"
+          else
+            printf '%s\n' "$ANSIBLE_INVENTORY_CONTENT" > ansible/inventory/hosts.yml
+            echo "✓ Ansible inventory restored (Produktion)"
+          fi
 
       - name: Restore user-mapping.json from Secret
+        # Dieselbe Trennung wie beim Verzeichnis: Das Test-Cockpit beschreibt
+        # USER_MAPPING_JSON_TEST und lässt die produktive Liste unberührt.
         env:
           USER_MAPPING_CONTENT: ${{ secrets.USER_MAPPING_JSON }}
+          USER_MAPPING_TEST: ${{ secrets.USER_MAPPING_JSON_TEST }}
         run: |
           mkdir -p config
-          printf '%s\n' "$USER_MAPPING_CONTENT" > config/user-mapping.json
-          echo "✓ User mapping restored"
+          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+
+          if [ "$TARGET" = "development" ]; then
+            if [ -z "$USER_MAPPING_TEST" ]; then
+              echo "::error::USER_MAPPING_JSON_TEST ist leer — Lauf abgebrochen."
+              echo "Eine leere Benutzerliste entzöge auf den Zielservern jeden Zugang."
+              exit 1
+            fi
+            printf '%s\n' "$USER_MAPPING_TEST" > config/user-mapping.json
+            echo "✓ User mapping restored (Entwicklung)"
+          else
+            printf '%s\n' "$USER_MAPPING_CONTENT" > config/user-mapping.json
+            echo "✓ User mapping restored (Produktion)"
+          fi
 
       - name: Verify user-mapping.json exists
         run: |
