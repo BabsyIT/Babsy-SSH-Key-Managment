@@ -23,22 +23,31 @@
 
 # Frühere Läufe legten bei jedem Durchgang Kopien mit Zeitstempel ab, ohne sie
 # je aufzuräumen. Die Rolle schreibt keine mehr; was liegt, kommt einmalig weg.
-- name: Find leftover backups from earlier runs
-  ansible.builtin.find:
-    paths: "{{ backup_dir }}"
-    patterns:
-      - "authorized_keys_github_*"
-      - "sudoers_*"
-  register: alte_sicherungen
-  tags: [setup, cleanup]
-
+#
+# In einem Aufruf statt je Datei: Auf docker2 lagen mehrere tausend Kopien, und
+# eine Aufgabe pro Datei (je eine SSH-Runde) hätte den Lauf stundenlang
+# blockiert — der Probelauf am 15.09.2026 stand nach 15 Minuten erst bei 1331.
 - name: Remove leftover backups from earlier runs
-  ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: absent
-  loop: "{{ alte_sicherungen.files }}"
-  loop_control:
-    label: "{{ item.path | basename }}"
+  ansible.builtin.command:
+    argv:
+      - find
+      - "{{ backup_dir }}"
+      - -maxdepth
+      - "1"
+      - -type
+      - f
+      - (
+      - -name
+      - "authorized_keys_github_*"
+      - -o
+      - -name
+      - "sudoers_*"
+      - )
+      - -print
+      - -delete
+  register: alte_sicherungen
+  changed_when: alte_sicherungen.stdout | length > 0
+  failed_when: alte_sicherungen.rc != 0 and 'No such file or directory' not in alte_sicherungen.stderr
   tags: [setup, cleanup]
 
 - name: Configure SSH daemon for dual authorized_keys files
