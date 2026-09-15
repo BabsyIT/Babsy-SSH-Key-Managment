@@ -7,7 +7,14 @@ set -euo pipefail
 cd "$(dirname "$0")/../../ansible"
 MAPPING=../config/user-mapping.json
 mkdir -p ../config
-if [ "$(uname)" = Darwin ]; then HOME_BASIS=/Users; else HOME_BASIS=/home; fi
+if [ "$(uname)" = Darwin ]; then
+  HOME_BASIS=/Users
+else
+  HOME_BASIS=/home
+  # Auf dem frischen Runner lief sshd nie; ohne dieses Verzeichnis scheitert
+  # `sshd -t`. Ein Server mit laufendem sshd hat es immer.
+  sudo mkdir -p /run/sshd
+fi
 
 lauf() {
   cp "../tests/rolle/$1" "$MAPPING"
@@ -21,8 +28,9 @@ echo "== Lauf 1: anlegen"
 lauf mapping-1.json
 id sshtest-a >/dev/null || fehler "sshtest-a wurde nicht angelegt"
 id sshtest-b >/dev/null 2>&1 && fehler "sshtest-b ist nur für einen anderen Host freigegeben und darf hier nicht entstehen"
-[ -s "$HOME_BASIS/sshtest-a/.ssh/authorized_keys_github" ] || fehler "Schlüsseldatei fehlt"
-grep -q "ssh-" "$HOME_BASIS/sshtest-a/.ssh/authorized_keys_github" || fehler "keine Schlüssel von GitHub in der Datei"
+# Mit sudo: Das Home eines neuen Kontos ist für andere nicht lesbar.
+sudo test -s "$HOME_BASIS/sshtest-a/.ssh/authorized_keys_github" || fehler "Schlüsseldatei fehlt"
+sudo grep -q "ssh-" "$HOME_BASIS/sshtest-a/.ssh/authorized_keys_github" || fehler "keine Schlüssel von GitHub in der Datei"
 sudo test -f /etc/sudoers.d/sshtest-a || fehler "sudoers-Datei fehlt"
 sudo visudo -c >/dev/null || fehler "sudoers ungültig"
 sudo grep -qx sshtest-a /var/lib/ssh-user-management/managed-users || fehler "nicht in managed-users"
@@ -36,7 +44,7 @@ echo "== Lauf 3: sshtest-a fällt aus der Liste und wird entfernt"
 lauf mapping-2.json
 id sshtest-a >/dev/null 2>&1 && fehler "sshtest-a wurde nicht gelöscht"
 sudo test -f /etc/sudoers.d/sshtest-a && fehler "sudoers-Datei von sshtest-a blieb stehen"
-[ -d "$HOME_BASIS/sshtest-a" ] && fehler "Home von sshtest-a blieb stehen"
+sudo test -d "$HOME_BASIS/sshtest-a" && fehler "Home von sshtest-a blieb stehen"
 id sshtest-c >/dev/null || fehler "sshtest-c wurde nicht angelegt"
 
 echo "✓ Rollentest bestanden ($(uname))"
