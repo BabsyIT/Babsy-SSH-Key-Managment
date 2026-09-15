@@ -27,7 +27,13 @@
 
 - name: Work out which accounts to remove or strip
   ansible.builtin.set_fact:
-    gewuenschte_konten: "{{ user_config.users | map(attribute='local_user') | list }}"
+    gewuenschte_konten: "{{ benutzer_hier | map(attribute='local_user') | list }}"
+    # Im Cockpit deaktivierte Personen. Steht jemand zugleich aktiv in der
+    # Liste, gewinnt die aktive Zuordnung.
+    entzogene_konten: >-
+      {{ (user_config.revoked_users | default([]))
+         | select('match', '^[a-z_][a-z0-9_-]{0,31}$') | list
+         | difference(user_config.users | map(attribute='local_user') | list) }}
     geschuetzte_konten: "{{ protected_users + [ansible_user | default('')] }}"
     # splitlines statt split: Im YAML-Block kam '\n' nicht als Zeilenumbruch
     # an, und die ganze Datei wurde zu einem einzigen "Kontonamen". Nur
@@ -105,4 +111,27 @@
   when:
     - (item.path | basename) not in gewuenschte_konten
     - (item.path | basename) not in geschuetzte_konten
+  tags: [users, remove]
+
+# --- Deaktivierte Personen, deren Konto nie verwaltet war ------------------
+#
+# Stufe 1 löscht verwaltete Konten ohnehin. Ein im Cockpit deaktiviertes Konto,
+# das nie in managed-users stand, bleibt bestehen — die Rolle weiss nicht, ob
+# es jemand anderem gehört. Sie sperrt es aber: Ein abgelaufenes Konto kommt
+# über SSH nicht mehr herein, auch nicht mit eigenen Schlüsseln in
+# ~/.ssh/authorized_keys, die Stufe 2 bewusst stehen lässt.
+- name: Read all local accounts
+  ansible.builtin.getent:
+    database: passwd
+  register: alle_konten
+  tags: [users, remove]
+
+- name: Lock deactivated accounts that were never managed
+  ansible.builtin.user:
+    name: "{{ item }}"
+    expires: 1
+    shell: /usr/sbin/nologin
+  loop: >-
+    {{ entzogene_konten | difference(verwaltete_konten) | difference(geschuetzte_konten)
+       | intersect(alle_konten.ansible_facts.getent_passwd.keys() | list) }}
   tags: [users, remove]

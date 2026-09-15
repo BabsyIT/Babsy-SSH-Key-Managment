@@ -74,6 +74,18 @@
     fail_msg: "Die Benutzerliste ist leer — Lauf abgebrochen, bevor Zugänge entzogen werden."
   tags: [always]
 
+# Wer auf diesen Server darf. Das Cockpit schränkt Personen auf einzelne Hosts
+# oder Umgebungen ein und schreibt dann `hosts` (Liste von Hostnamen, wie sie
+# im Inventar stehen). Fehlt `hosts`, gilt die Person überall. Bis 09/2026
+# ignorierte die Rolle das Feld und legte jede Person auf jedem Server an.
+- name: Work out users for this host
+  ansible.builtin.set_fact:
+    benutzer_hier: >-
+      {{ (user_config.users | rejectattr('hosts', 'defined') | list)
+         + (user_config.users | selectattr('hosts', 'defined')
+            | selectattr('hosts', 'contains', inventory_hostname) | list) }}
+  tags: [always]
+
 - name: Ensure state directory exists
   ansible.builtin.file:
     path: "{{ managed_users_file | dirname }}"
@@ -83,7 +95,7 @@
 
 - name: Process each user
   ansible.builtin.include_tasks: manage_user.yml
-  loop: "{{ user_config.users }}"
+  loop: "{{ benutzer_hier }}"
   loop_control:
     loop_var: user_item
     label: "{{ user_item.local_user }}"
