@@ -81,3 +81,26 @@ jobs:
       - name: Tests
         working-directory: scripts
         run: python -m unittest discover -p 'test_*.py' -v
+
+  rolle:
+    name: Rolle auf ${{ matrix.os }}
+    # Die Rolle echt ausführen — gegen den frischen Runner selbst. Linux für die
+    # Server, macOS für den Mac Mini. Syntax und Lint allein hätten weder das
+    # nie angelegte Konto noch den stündlichen sshd-Neustart gefunden.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Ansible installieren
+        run: pip install 'ansible-core==2.21.*'
+
+      - name: Rolle anlegen, wiederholen, entziehen
+        run: tests/rolle/pruefen.sh

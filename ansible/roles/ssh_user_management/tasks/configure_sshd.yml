@@ -22,7 +22,7 @@
       AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys_github
     dest: /etc/ssh/sshd_config.d/90-ssh-user-management.conf
     owner: root
-    group: root
+    group: "{{ root_gruppe }}"
     mode: '0644'
     validate: 'sshd -t -f %s'
   when: sshd_config_d.stat.exists and sshd_config_d.stat.isdir

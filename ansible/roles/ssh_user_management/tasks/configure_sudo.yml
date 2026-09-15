@@ -6,7 +6,7 @@
     src: sudoers_full.j2
     dest: "/etc/sudoers.d/{{ user_item.local_user }}"
     owner: root
-    group: root
+    group: "{{ root_gruppe }}"
     mode: '0440'
     validate: 'visudo -cf %s'
   when: user_item.sudo_access == "full"
@@ -17,7 +17,7 @@
     src: sudoers_limited.j2
     dest: "/etc/sudoers.d/{{ user_item.local_user }}"
     owner: root
-    group: root
+    group: "{{ root_gruppe }}"
     mode: '0440'
     validate: 'visudo -cf %s'
   when:

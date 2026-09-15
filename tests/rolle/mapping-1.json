@@ -1,0 +1,4 @@
+{"users": [
+  {"github_user": "stefan-ffr", "local_user": "sshtest-a", "full_name": "Test A", "sudo_access": "full", "groups": ["ssh-users"]},
+  {"github_user": "stefan-ffr", "local_user": "sshtest-b", "full_name": "Test B", "sudo_access": "none", "groups": [], "hosts": ["anderer.babsy.ch"]}
+]}

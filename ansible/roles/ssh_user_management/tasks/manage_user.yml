@@ -1,12 +1,14 @@
 ---
 # Task file to manage individual user
 
+# `id` statt getent: getent gibt es auf macOS nicht, `id` überall.
 - name: "{{ user_item.local_user }} | Check if user exists"
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ user_item.local_user }}"
-    fail_key: false
+  ansible.builtin.command:
+    argv: [id, -u, "{{ user_item.local_user }}"]
   register: user_exists
+  changed_when: false
+  failed_when: false
+  check_mode: false
   tags: [users]
 
 - name: "{{ user_item.local_user }} | Create user"
@@ -14,13 +16,12 @@
     name: "{{ user_item.local_user }}"
     comment: "{{ user_item.full_name | default(user_item.local_user) }}"
     shell: "{{ user_config.config.default_shell | default(default_shell) }}"
-    home: "{{ user_home_base }}/{{ user_item.local_user }}"
+    home: "{{ home_basis }}/{{ user_item.local_user }}"
     create_home: true
     state: present
-  # Mit fail_key: false liefert getent den Schlüssel auch für ein fehlendes
-  # Konto — nur mit leerem Wert. Die frühere Prüfung "is not defined" traf
-  # deshalb nie zu, und neue Konten wurden nie angelegt.
-  when: (user_exists.ansible_facts.getent_passwd | default({})).get(user_item.local_user) is none
+  # Früher mit getent und "is not defined" — das traf nie zu, neue Konten
+  # wurden nie angelegt. `id` scheitert eindeutig, wenn es das Konto nicht gibt.
+  when: user_exists.rc != 0
   tags: [users, create]
 
 # Wer in der Benutzerliste steht, gilt ab jetzt als verwaltet — auch ein Konto,
@@ -55,3 +56,27 @@
   ansible.builtin.include_tasks: configure_sudo.yml
   when: user_item.sudo_access is defined
   tags: [users, sudo]
+
+# Ist unter macOS «Entfernte Anmeldung» auf bestimmte Benutzer beschränkt,
+# lässt sshd nur Mitglieder von com.apple.access_ssh herein. Ohne Aufnahme
+# wäre das Konto angelegt und hätte Schlüssel, käme aber nie hinein.
+- name: "{{ user_item.local_user }} | Check macOS remote login restriction"
+  ansible.builtin.command:
+    argv: [dscl, ., -read, /Groups/com.apple.access_ssh]
+  register: access_ssh_gruppe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: ist_macos
+  tags: [users]
+
+- name: "{{ user_item.local_user }} | Allow remote login on macOS"
+  ansible.builtin.command:
+    argv: [dseditgroup, -o, edit, -a, "{{ user_item.local_user }}", -t, user, com.apple.access_ssh]
+  register: access_ssh_aufnahme
+  changed_when: user_item.local_user not in (access_ssh_gruppe.stdout | default(''))
+  when:
+    - ist_macos
+    - access_ssh_gruppe.rc | default(1) == 0
+    - user_item.local_user not in (access_ssh_gruppe.stdout | default(''))
+  tags: [users]
