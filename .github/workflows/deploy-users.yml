@@ -207,10 +207,14 @@ jobs:
         # belegt nicht, dass Benutzer tatsaechlich angelegt wurden.
         if: always() && github.event.inputs.dry_run != 'true'
         env:
-          COCKPIT_URL_PROD: ${{ secrets.COCKPIT_API_URL }}
-          COCKPIT_TOKEN_PROD: ${{ secrets.COCKPIT_SSH_API_TOKEN }}
-          COCKPIT_URL_TEST: ${{ secrets.COCKPIT_API_URL_TEST }}
-          COCKPIT_TOKEN_TEST: ${{ secrets.COCKPIT_SSH_API_TOKEN_TEST }}
+          # Die Adressen sind nicht geheim und haben feste Vorgaben; als
+          # Repository-Variable lassen sie sich trotzdem umstellen.
+          COCKPIT_URL_PROD: ${{ vars.COCKPIT_API_URL || 'https://cockpit.babsy.ch' }}
+          COCKPIT_URL_TEST: ${{ vars.COCKPIT_API_URL_TEST || 'https://cockpit.test.babsy.ch' }}
+          # SSH_API_TOKEN liegt hier seit August 2026 bereit (siehe .env.example
+          # im Cockpit) — derselbe Wert, den /api/ssh/* im Cockpit verlangt.
+          COCKPIT_TOKEN_PROD: ${{ secrets.SSH_API_TOKEN }}
+          COCKPIT_TOKEN_TEST: ${{ secrets.SSH_API_TOKEN_TEST }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           TARGET="${{ github.event.inputs.target_environment || 'all' }}"
@@ -224,7 +228,7 @@ jobs:
           fi
 
           if [ -z "$URL" ] || [ -z "$TOKEN" ]; then
-            echo "::warning::Cockpit-URL oder -Token fehlt — Ergebnis nicht gemeldet. Die Infrastrukturseite zeigt die Hosts dann als ausstehend."
+            echo "::warning::SSH_API_TOKEN (bzw. SSH_API_TOKEN_TEST) fehlt — Ergebnis nicht gemeldet. Die Infrastrukturseite zeigt die Hosts dann als ausstehend."
             exit 0
           fi
 

@@ -29,12 +29,12 @@ Server als „Verwaltet“ — vorher steht er als „Ausstehend“, nach einem
 Fehlschlag als „Fehlerhaft“. Fehlen die Secrets, läuft der Deploy trotzdem,
 es erscheint nur eine Warnung.
 
-| Secret Name | Beschreibung | Beispiel |
-|------------|--------------|----------|
-| `COCKPIT_API_URL` | Basis-URL des produktiven Cockpits | `https://cockpit.babsy.ch` |
-| `COCKPIT_SSH_API_TOKEN` | Derselbe Wert wie `SSH_API_TOKEN` im produktiven Cockpit | — |
-| `COCKPIT_API_URL_TEST` | Basis-URL des Test-Cockpits (für `target_environment=development`) | `https://cockpit.test.babsy.ch` |
-| `COCKPIT_SSH_API_TOKEN_TEST` | `SSH_API_TOKEN` des Test-Cockpits | — |
+| Name | Art | Beschreibung |
+|------|-----|--------------|
+| `SSH_API_TOKEN` | Secret | `SSH_API_TOKEN` des produktiven Cockpits — besteht bereits |
+| `SSH_API_TOKEN_TEST` | Secret | `SSH_API_TOKEN` des Test-Cockpits (für `target_environment=development`) |
+| `COCKPIT_API_URL` | Variable, optional | Vorgabe `https://cockpit.babsy.ch` |
+| `COCKPIT_API_URL_TEST` | Variable, optional | Vorgabe `https://cockpit.test.babsy.ch` |
 
 ## 🔧 Schritt-für-Schritt Anleitung
 
