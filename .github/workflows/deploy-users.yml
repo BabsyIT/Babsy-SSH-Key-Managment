@@ -190,11 +190,74 @@ jobs:
             LIMIT_FLAG="--limit ${TARGET}"
           fi
 
+          # Die Ausgabe wird mitgeschrieben, damit der naechste Schritt das
+          # PLAY RECAP je Host ans Cockpit melden kann. pipefail ist Pflicht:
+          # Ohne ihn liefert die Pipe den Status von tee, und ein
+          # fehlgeschlagener Lauf stuende hier als Erfolg.
+          set -o pipefail
           ansible-playbook \
             -i inventory/hosts.yml \
             ${LIMIT_FLAG} \
             -v \
-            playbooks/deploy-users.yml
+            playbooks/deploy-users.yml 2>&1 | tee "$RUNNER_TEMP/ansible-run.log"
+
+      - name: Ergebnis an das Cockpit melden
+        # Auch nach einem Fehlschlag: Gerade dann soll das Cockpit den Host
+        # nicht weiter als verwaltet zeigen. Trockenlaeufe nicht — ein --check
+        # belegt nicht, dass Benutzer tatsaechlich angelegt wurden.
+        if: always() && github.event.inputs.dry_run != 'true'
+        env:
+          # Die Adressen sind nicht geheim und haben feste Vorgaben; als
+          # Repository-Variable lassen sie sich trotzdem umstellen.
+          COCKPIT_URL_PROD: ${{ vars.COCKPIT_API_URL || 'https://cockpit.babsy.ch' }}
+          COCKPIT_URL_TEST: ${{ vars.COCKPIT_API_URL_TEST || 'https://cockpit.test.babsy.ch' }}
+          # SSH_API_TOKEN liegt hier seit August 2026 bereit (siehe .env.example
+          # im Cockpit) — derselbe Wert, den /api/ssh/* im Cockpit verlangt.
+          COCKPIT_TOKEN_PROD: ${{ secrets.SSH_API_TOKEN }}
+          COCKPIT_TOKEN_TEST: ${{ secrets.SSH_API_TOKEN_TEST }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+
+          # Dieselbe Trennung wie beim Verzeichnis: Entwicklungslaeufe meldet
+          # das Test-Cockpit, alle anderen das produktive.
+          if [ "$TARGET" = "development" ]; then
+            URL="$COCKPIT_URL_TEST"; TOKEN="$COCKPIT_TOKEN_TEST"
+          else
+            URL="$COCKPIT_URL_PROD"; TOKEN="$COCKPIT_TOKEN_PROD"
+          fi
+
+          if [ -z "$URL" ] || [ -z "$TOKEN" ]; then
+            echo "::warning::SSH_API_TOKEN (bzw. SSH_API_TOKEN_TEST) fehlt — Ergebnis nicht gemeldet. Die Infrastrukturseite zeigt die Hosts dann als ausstehend."
+            exit 0
+          fi
+
+          LOG="$RUNNER_TEMP/ansible-run.log"
+          if [ ! -s "$LOG" ]; then
+            echo "::warning::Keine Ansible-Ausgabe vorhanden — der Lauf brach vor dem Playbook ab. Nichts zu melden."
+            exit 0
+          fi
+
+          # Parser mit Tests: scripts/ansible_recap.py
+          python3 scripts/ansible_recap.py "$LOG" "$RUN_URL" > "$RUNNER_TEMP/deploy-result.json"
+
+          ANZAHL=$(jq '.hosts | length' "$RUNNER_TEMP/deploy-result.json")
+          if [ "$ANZAHL" = "0" ]; then
+            echo "::warning::Kein PLAY RECAP gefunden — nichts zu melden."
+            exit 0
+          fi
+          jq -r '.hosts[] | "  \(.hostname): unreachable=\(.unreachable) failed=\(.failed)"' "$RUNNER_TEMP/deploy-result.json"
+
+          # Ein Fehler beim Melden darf den Deploy nicht rot faerben — die
+          # Benutzer sind dann trotzdem ausgerollt. Er soll aber auffallen.
+          if ! curl -fsS --max-time 30 \
+                -X POST "${URL%/}/api/ssh/deploy-result" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                --data @"$RUNNER_TEMP/deploy-result.json"; then
+            echo "::warning::Ergebnis konnte nicht an das Cockpit gemeldet werden."
+          fi
+          echo
 
       - name: Generate deployment report
         if: always()

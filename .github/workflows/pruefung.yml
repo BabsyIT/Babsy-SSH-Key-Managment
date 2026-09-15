@@ -1,0 +1,83 @@
+name: Prüfung
+
+# Dieses Repository verteilt Zugänge auf alle Server. Ein Fehler im Workflow
+# oder in der Rolle fällt sonst erst im stündlichen Lauf auf — im schlimmsten
+# Fall als Server, auf dem niemand mehr Zugang hat. Bis September 2026 lief vor
+# dem Merge gar nichts; dieser Workflow ist die Prüfung davor.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  workflows:
+    name: Workflows (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: actionlint
+        env:
+          # Nur Warnungen und Fehler: Die bestehenden Workflows haben rund
+          # dreissig Stil-Hinweise (fehlende Anführungszeichen bei festen
+          # Werten). Die sollen den Merge nicht blockieren, echte Fehler schon.
+          SHELLCHECK_OPTS: -S warning
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+  ansible:
+    name: Ansible (Syntax und Lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # ansible-core 2.21 verlangt mindestens Python 3.12
+          python-version: '3.13'
+
+      - name: Ansible installieren
+        # Feste Versionen: Ein neues ansible-lint mit neuen Regeln soll einen
+        # PR nicht rot färben, der daran nichts geändert hat.
+        run: |
+          pip install 'ansible-core==2.21.*' 'ansible-lint==26.*'
+          ansible-galaxy collection install community.general
+
+      - name: Syntaxprüfung
+        # Das echte Inventar liegt nur als Secret vor; für die Syntax reicht
+        # das Beispiel.
+        run: ansible-playbook -i inventory/hosts.yml.example --syntax-check playbooks/deploy-users.yml
+
+      - name: ansible-lint
+        run: ansible-lint playbooks/deploy-users.yml
+
+  skripte:
+    name: Skripte (shellcheck, Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: shellcheck
+        # Nur Fehler: Die Skripte unter scripts/ sind Referenz, nicht der
+        # produktive Weg (siehe README). Warnungen dort sind bekannt.
+        run: shellcheck -S error scripts/*.sh
+
+      - name: Python übersetzen
+        run: python -m py_compile scripts/*.py
+
+      - name: Tests
+        working-directory: scripts
+        run: python -m unittest discover -p 'test_*.py' -v
