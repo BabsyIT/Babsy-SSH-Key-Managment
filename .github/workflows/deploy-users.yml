@@ -25,6 +25,12 @@ on:
         default: 'false'
 
   # Scheduled deployment (täglich um 6 Uhr UTC als Backup)
+  #
+  # Läufe ohne Eingabe (Zeitplan, Push, repository_dispatch) gelten der
+  # Produktion. Vorher war die Vorgabe "all": Der tägliche Lauf spielte die
+  # produktive Benutzerliste damit auch auf Entwicklungsserver aus dem alten
+  # Verzeichnis (am 14. und 15.09.2026 auf docker1.test). Wer wirklich alle
+  # will, wählt "all" beim manuellen Start.
   schedule:
     - cron: '0 6 * * *'
 
@@ -82,7 +88,7 @@ jobs:
           ANSIBLE_INVENTORY_TEST: ${{ secrets.ANSIBLE_INVENTORY_TEST }}
         run: |
           mkdir -p ansible/inventory
-          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+          TARGET="${{ github.event.inputs.target_environment || 'production' }}"
 
           if [ "$TARGET" = "development" ]; then
             if [ -z "$ANSIBLE_INVENTORY_TEST" ]; then
@@ -105,7 +111,7 @@ jobs:
           USER_MAPPING_TEST: ${{ secrets.USER_MAPPING_JSON_TEST }}
         run: |
           mkdir -p config
-          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+          TARGET="${{ github.event.inputs.target_environment || 'production' }}"
 
           if [ "$TARGET" = "development" ]; then
             if [ -z "$USER_MAPPING_TEST" ]; then
@@ -133,7 +139,7 @@ jobs:
       - name: Display deployment info
         run: |
           echo "=== Deployment Information ==="
-          echo "Target environment: ${{ github.event.inputs.target_environment || 'all' }}"
+          echo "Target environment: ${{ github.event.inputs.target_environment || 'production' }}"
           echo "Dry run: ${{ github.event.inputs.dry_run || 'false' }}"
           echo "Trigger: ${{ github.event_name }}"
           echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
@@ -159,7 +165,7 @@ jobs:
           # angefordert war. Damit prueft er nicht, was spaeter geschieht — und
           # ein Trockenlauf, der etwas anderes tut als der Ernstfall, ist
           # schlimmer als keiner.
-          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+          TARGET="${{ github.event.inputs.target_environment || 'production' }}"
 
           if [ "$TARGET" = "all" ]; then
             LIMIT_FLAG=""
@@ -182,7 +188,7 @@ jobs:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
           ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/deploy_key
         run: |
-          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+          TARGET="${{ github.event.inputs.target_environment || 'production' }}"
 
           if [ "$TARGET" = "all" ]; then
             LIMIT_FLAG=""
@@ -217,7 +223,7 @@ jobs:
           COCKPIT_TOKEN_TEST: ${{ secrets.SSH_API_TOKEN_TEST }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+          TARGET="${{ github.event.inputs.target_environment || 'production' }}"
 
           # Dieselbe Trennung wie beim Verzeichnis: Entwicklungslaeufe meldet
           # das Test-Cockpit, alle anderen das produktive.
@@ -265,7 +271,7 @@ jobs:
           echo "### Deployment Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment**: ${{ github.event.inputs.target_environment || 'all' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.target_environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Dry Run**: ${{ github.event.inputs.dry_run || 'false' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered by**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
@@ -306,7 +312,7 @@ jobs:
             **Branch:** ${context.ref}
             **Commit:** ${context.sha.substring(0, 7)}
             **Timestamp:** ${new Date().toISOString()}
-            **Target Environment:** ${context.payload.inputs?.target_environment || 'all'}
+            **Target Environment:** ${context.payload.inputs?.target_environment || 'production'}
             **Dry Run:** ${context.payload.inputs?.dry_run || 'false'}
 
             ### ⚠️ Deployment Error

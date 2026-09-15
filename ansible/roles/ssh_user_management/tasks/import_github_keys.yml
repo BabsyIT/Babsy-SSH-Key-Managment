@@ -15,18 +15,6 @@
   when: github_keys_response.status == 200
   tags: [ssh_keys]
 
-- name: "{{ user_item.local_user }} | Backup existing authorized_keys_github"
-  ansible.builtin.copy:
-    src: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys_github"
-    dest: "{{ backup_dir }}/authorized_keys_github_{{ user_item.local_user }}_{{ ansible_date_time.epoch }}"
-    remote_src: true
-    mode: '0600'
-  when:
-    - create_backups
-    - github_keys_response.status == 200
-  ignore_errors: true
-  tags: [ssh_keys, backup]
-
 - name: "{{ user_item.local_user }} | Ensure .ssh directory exists"
   ansible.builtin.file:
     path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh"
@@ -34,26 +22,41 @@
     owner: "{{ user_item.local_user }}"
     group: "{{ user_item.local_user }}"
     mode: '0700'
-  when: github_keys_response.status == 200
   tags: [ssh_keys]
 
-- name: "{{ user_item.local_user }} | Write SSH keys to authorized_keys_github (separate file)"
+# Die Datei wird bei jedem Lauf vollständig neu geschrieben — sie gehört allein
+# dieser Automatik. Was jemand von Hand hineinschreibt, ist beim nächsten Lauf
+# weg; von Hand gepflegte Schlüssel gehören in ~/.ssh/authorized_keys.
+#
+# Auch leer: Vorher blieb die Datei unangetastet, sobald GitHub keinen
+# Schlüssel mehr lieferte (Bedingung "content | length > 0"). Wer seine
+# Schlüssel bei GitHub löschte, behielt damit den Zugang. 404 heisst, das
+# GitHub-Konto gibt es nicht mehr — auch dann bleibt nichts stehen. Andere
+# Antworten (Netzfehler, 5xx) lassen den Fetch oben scheitern, und die Datei
+# bleibt, wie sie ist, statt versehentlich alle auszusperren.
+#
+# Ohne Sicherungskopie: Bis 09/2026 legte jeder Lauf eine Kopie mit Zeitstempel
+# an und räumte sie nie auf — auf docker1.test lagen nach wenigen Wochen über
+# fünfhundert. Den Inhalt kann jeder Lauf aus GitHub und dem Cockpit neu bilden.
+- name: "{{ user_item.local_user }} | Write authorized_keys_github"
   ansible.builtin.copy:
     content: |
-      # Automatically managed keys from GitHub
-      # User: {{ user_item.github_user }}
-      # Last updated: {{ ansible_date_time.iso8601 }}
-      # DO NOT manually edit this file - changes will be overwritten
-      # Use ~/.ssh/authorized_keys for manual keys
+      # Automatisch verwaltet von Babsy-SSH-Key-Managment
+      # GitHub: {{ user_item.github_user }}
+      # Zuletzt geschrieben: {{ ansible_date_time.iso8601 }}
+      # NICHT VON HAND ÄNDERN — wird bei jedem Lauf überschrieben.
+      # Eigene Schlüssel gehören in ~/.ssh/authorized_keys.
 
-      {{ github_keys_response.content }}
+      {% if github_keys_response.status == 200 %}{{ github_keys_response.content | trim }}{% endif %}
+
+      {% for key in user_item.ssh_keys | default([]) %}
+      {{ key }}
+      {% endfor %}
     dest: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys_github"
     owner: "{{ user_item.local_user }}"
     group: "{{ user_item.local_user }}"
     mode: '0600'
-  when:
-    - github_keys_response.status == 200
-    - github_keys_response.content | length > 0
+    backup: false
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Create/preserve manual authorized_keys file"
@@ -84,6 +87,9 @@
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Log SSH key import"
+  # Das Protokoll ist Nachweis, keine Änderung am System — sonst meldete jeder
+  # Lauf "changed", auch wenn sich an den Zugängen nichts getan hat.
+  changed_when: false
   ansible.builtin.lineinfile:
     path: "{{ log_dir }}/ssh_keys.log"
     line: "{{ ansible_date_time.iso8601 }} - Imported {{ github_keys_response.content.split('\n') | select | list | length }} keys for {{ user_item.local_user }} from GitHub user {{ user_item.github_user }}"

@@ -21,13 +21,25 @@
   when: enable_logging
   tags: [setup]
 
-- name: Create backup directory
+# Frühere Läufe legten bei jedem Durchgang Kopien mit Zeitstempel ab, ohne sie
+# je aufzuräumen. Die Rolle schreibt keine mehr; was liegt, kommt einmalig weg.
+- name: Find leftover backups from earlier runs
+  ansible.builtin.find:
+    paths: "{{ backup_dir }}"
+    patterns:
+      - "authorized_keys_github_*"
+      - "sudoers_*"
+  register: alte_sicherungen
+  tags: [setup, cleanup]
+
+- name: Remove leftover backups from earlier runs
   ansible.builtin.file:
-    path: "{{ backup_dir }}"
-    state: directory
-    mode: '0700'
-  when: create_backups
-  tags: [setup]
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ alte_sicherungen.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  tags: [setup, cleanup]
 
 - name: Configure SSH daemon for dual authorized_keys files
   ansible.builtin.include_tasks: configure_sshd.yml
@@ -52,6 +64,7 @@
   tags: [users]
 
 - name: Create deployment log entry
+  changed_when: false
   ansible.builtin.lineinfile:
     path: "{{ log_dir }}/deployment.log"
     line: "{{ ansible_date_time.iso8601 }} - Deployed {{ user_config.users | length }} users to {{ inventory_hostname }}"
