@@ -17,7 +17,22 @@
     home: "{{ user_home_base }}/{{ user_item.local_user }}"
     create_home: true
     state: present
-  when: user_exists.ansible_facts.getent_passwd is not defined or user_exists.ansible_facts.getent_passwd[user_item.local_user] is not defined
+  # Mit fail_key: false liefert getent den Schlüssel auch für ein fehlendes
+  # Konto — nur mit leerem Wert. Die frühere Prüfung "is not defined" traf
+  # deshalb nie zu, und neue Konten wurden nie angelegt.
+  when: (user_exists.ansible_facts.getent_passwd | default({})).get(user_item.local_user) is none
+  tags: [users, create]
+
+# Wer in der Benutzerliste steht, gilt ab jetzt als verwaltet — auch ein Konto,
+# das es vor der Automatik schon gab. Bestehende Zugänge sollen ins Cockpit
+# übergehen, nicht dauerhaft neben ihm herlaufen. Fällt die Person später aus
+# der Liste, wird ihr Konto deshalb wie jedes andere entfernt.
+- name: "{{ user_item.local_user }} | Register account as managed"
+  ansible.builtin.lineinfile:
+    path: "{{ managed_users_file }}"
+    line: "{{ user_item.local_user }}"
+    create: true
+    mode: '0644'
   tags: [users, create]
 
 - name: "{{ user_item.local_user }} | Add user to groups"

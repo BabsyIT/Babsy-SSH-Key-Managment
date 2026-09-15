@@ -64,6 +64,23 @@
     msg: "Managing {{ user_config.users | length }} users"
   tags: [always]
 
+# Eine leere Liste hiesse für das Entfernen unten: alle raus. Das ist nie
+# gewollt, sondern ein kaputtes Secret oder ein Fehler beim Schreiben.
+- name: Refuse to run with an empty user list
+  ansible.builtin.assert:
+    that:
+      - user_config.users is defined
+      - user_config.users | length > 0
+    fail_msg: "Die Benutzerliste ist leer — Lauf abgebrochen, bevor Zugänge entzogen werden."
+  tags: [always]
+
+- name: Ensure state directory exists
+  ansible.builtin.file:
+    path: "{{ managed_users_file | dirname }}"
+    state: directory
+    mode: '0755'
+  tags: [setup]
+
 - name: Process each user
   ansible.builtin.include_tasks: manage_user.yml
   loop: "{{ user_config.users }}"
@@ -71,6 +88,10 @@
     loop_var: user_item
     label: "{{ user_item.local_user }}"
   tags: [users]
+
+- name: Remove access that is no longer listed
+  ansible.builtin.include_tasks: remove_users.yml
+  tags: [users, remove]
 
 - name: Create deployment log entry
   changed_when: false
