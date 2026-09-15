@@ -234,38 +234,8 @@ jobs:
             exit 0
           fi
 
-          python3 - "$LOG" "$RUN_URL" > "$RUNNER_TEMP/deploy-result.json" <<'PY'
-          import json, re, sys
-
-          log_path, run_url = sys.argv[1], sys.argv[2]
-          zeile = re.compile(
-              r'^(?P<host>\S+)\s*:\s*ok=(?P<ok>\d+)\s+changed=(?P<changed>\d+)\s+'
-              r'unreachable=(?P<unreachable>\d+)\s+failed=(?P<failed>\d+)'
-          )
-
-          hosts = {}
-          im_recap = False
-          with open(log_path, encoding='utf-8', errors='replace') as f:
-              for roh in f:
-                  text = roh.rstrip('\n')
-                  if text.startswith('PLAY RECAP'):
-                      im_recap = True
-                      continue
-                  if not im_recap:
-                      continue
-                  m = zeile.match(text)
-                  if m:
-                      # Mehrere Plays: der letzte Stand je Host zaehlt.
-                      hosts[m['host']] = {
-                          'hostname': m['host'],
-                          'ok': int(m['ok']),
-                          'changed': int(m['changed']),
-                          'unreachable': int(m['unreachable']),
-                          'failed': int(m['failed']),
-                      }
-
-          json.dump({'runUrl': run_url, 'dryRun': False, 'hosts': list(hosts.values())}, sys.stdout)
-          PY
+          # Parser mit Tests: scripts/ansible_recap.py
+          python3 scripts/ansible_recap.py "$LOG" "$RUN_URL" > "$RUNNER_TEMP/deploy-result.json"
 
           ANZAHL=$(jq '.hosts | length' "$RUNNER_TEMP/deploy-result.json")
           if [ "$ANZAHL" = "0" ]; then
