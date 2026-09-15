@@ -41,6 +41,9 @@
     groups: "{{ user_item.groups | join(',') }}"
     append: true
   when: user_item.groups is defined and user_item.groups | length > 0
+  # Im Trockenlauf legt die vorige Aufgabe fehlende Gruppen nur zum Schein an;
+  # die Zuweisung fände sie dann nicht. Im echten Lauf gilt jeder Fehler.
+  ignore_errors: "{{ ansible_check_mode }}"
   tags: [users, groups]
 
 - name: "{{ user_item.local_user }} | Import SSH keys from GitHub"
