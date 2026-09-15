@@ -59,6 +59,17 @@
   loop: "{{ verwaltete_konten | difference(gewuenschte_konten) | difference(geschuetzte_konten) }}"
   tags: [users, remove]
 
+# Das user-Modul löscht unter macOS das Home nicht mit (im Rollentest auf
+# macos-15 gefunden). Ohne diesen Schritt blieben Dateien der entfernten Person
+# auf dem Mac Mini liegen.
+- name: Remove home of deleted accounts on macOS
+  ansible.builtin.file:
+    path: "/Users/{{ item }}"
+    state: absent
+  loop: "{{ verwaltete_konten | difference(gewuenschte_konten) | difference(geschuetzte_konten) }}"
+  when: ist_macos
+  tags: [users, remove]
+
 - name: Forget deleted accounts
   ansible.builtin.lineinfile:
     path: "{{ managed_users_file }}"
@@ -71,7 +82,7 @@
 
 - name: Find key files written by this role
   ansible.builtin.find:
-    paths: "{{ user_home_base }}"
+    paths: "{{ home_basis }}"
     patterns: authorized_keys_github
     recurse: true
     depth: 3
@@ -120,13 +131,17 @@
 # es jemand anderem gehört. Sie sperrt es aber: Ein abgelaufenes Konto kommt
 # über SSH nicht mehr herein, auch nicht mit eigenen Schlüsseln in
 # ~/.ssh/authorized_keys, die Stufe 2 bewusst stehen lässt.
+# Unter macOS bewusst nicht: getent fehlt, und das user-Modul kann dort kein
+# Ablaufdatum setzen. Verwaltete Konten löscht Stufe 1 auch auf dem Mac.
 - name: Read all local accounts
   ansible.builtin.getent:
     database: passwd
   register: alle_konten
+  when: not ist_macos
   tags: [users, remove]
 
 - name: Lock deactivated accounts that were never managed
+  when: not ist_macos
   ansible.builtin.user:
     name: "{{ item }}"
     expires: 1

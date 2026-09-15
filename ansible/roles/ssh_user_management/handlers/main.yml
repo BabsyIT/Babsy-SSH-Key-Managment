@@ -5,4 +5,18 @@
   ansible.builtin.service:
     name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
     state: restarted
+  when: ansible_facts.system != 'Darwin'
+  listen: restart sshd
+
+# macOS startet sshd bei Bedarf über launchd neu; kickstart übernimmt die
+# geänderte Konfiguration für neue Verbindungen.
+- name: Restart sshd on macOS
+  ansible.builtin.command:
+    argv: [launchctl, kickstart, -k, system/com.openssh.sshd]
+  changed_when: true
+  # Ist «Entfernte Anmeldung» aus, ist der Dienst nicht geladen — dann gibt es
+  # nichts neu zu starten, und die Konfiguration greift beim Einschalten.
+  register: kickstart
+  failed_when: kickstart.rc != 0 and 'Could not find service' not in kickstart.stderr
+  when: ansible_facts.system == 'Darwin'
   listen: restart sshd

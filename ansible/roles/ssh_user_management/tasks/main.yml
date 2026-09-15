@@ -1,7 +1,18 @@
 ---
 # Main tasks for SSH user management role
 
+# macOS (der Mac Mini) unterscheidet sich an wenigen, aber harten Stellen:
+# Home unter /Users, Primärgruppe staff statt einer eigenen je Konto, die
+# Wurzelgruppe heisst wheel, und es gibt weder apt noch getent.
+- name: Set platform specific values
+  ansible.builtin.set_fact:
+    ist_macos: "{{ ansible_facts.system == 'Darwin' }}"
+    home_basis: "{{ '/Users' if ansible_facts.system == 'Darwin' else user_home_base }}"
+    root_gruppe: "{{ 'wheel' if ansible_facts.system == 'Darwin' else 'root' }}"
+  tags: [always]
+
 - name: Ensure required packages are installed
+  when: not ist_macos
   ansible.builtin.apt:
     name:
       - sudo

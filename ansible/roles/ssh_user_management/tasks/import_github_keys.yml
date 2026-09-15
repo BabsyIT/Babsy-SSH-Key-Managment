@@ -21,10 +21,10 @@
 
 - name: "{{ user_item.local_user }} | Ensure .ssh directory exists"
   ansible.builtin.file:
-    path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh"
+    path: "{{ home_basis }}/{{ user_item.local_user }}/.ssh"
     state: directory
     owner: "{{ user_item.local_user }}"
-    group: "{{ user_item.local_user }}"
+    group: "{{ 'staff' if ist_macos else user_item.local_user }}"
     mode: '0700'
   tags: [ssh_keys]
 
@@ -56,19 +56,19 @@
       {% for key in user_item.ssh_keys | default([]) %}
       {{ key }}
       {% endfor %}
-    dest: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys_github"
+    dest: "{{ home_basis }}/{{ user_item.local_user }}/.ssh/authorized_keys_github"
     owner: "{{ user_item.local_user }}"
-    group: "{{ user_item.local_user }}"
+    group: "{{ 'staff' if ist_macos else user_item.local_user }}"
     mode: '0600'
     backup: false
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Create/preserve manual authorized_keys file"
   ansible.builtin.file:
-    path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
+    path: "{{ home_basis }}/{{ user_item.local_user }}/.ssh/authorized_keys"
     state: touch
     owner: "{{ user_item.local_user }}"
-    group: "{{ user_item.local_user }}"
+    group: "{{ 'staff' if ist_macos else user_item.local_user }}"
     mode: '0600'
     modification_time: preserve
     access_time: preserve
@@ -77,7 +77,7 @@
 
 - name: "{{ user_item.local_user }} | Add header to manual authorized_keys"
   ansible.builtin.blockinfile:
-    path: "{{ user_home_base }}/{{ user_item.local_user }}/.ssh/authorized_keys"
+    path: "{{ home_basis }}/{{ user_item.local_user }}/.ssh/authorized_keys"
     marker: "# {mark} SSH-USER-MANAGEMENT HEADER"
     block: |
       # Manual SSH Keys - Add your keys below
@@ -85,7 +85,7 @@
       # Both files are used for authentication
     create: true
     owner: "{{ user_item.local_user }}"
-    group: "{{ user_item.local_user }}"
+    group: "{{ 'staff' if ist_macos else user_item.local_user }}"
     mode: '0600'
   when: github_keys_response.status == 200
   tags: [ssh_keys]
