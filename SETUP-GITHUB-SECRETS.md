@@ -21,6 +21,21 @@ Diese Anleitung erklärt, wie Sie die erforderlichen GitHub Secrets für die M36
 | `ANSIBLE_SSH_PRIVATE_KEY` | SSH Private Key für Ansible | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `ANSIBLE_TARGET_HOSTS` | Komma-separierte Liste der Ziel-Hosts | `host1.example.com,host2.example.com` |
 
+### Rückmeldung an das Management Cockpit
+
+Nach jedem echten Lauf meldet der Workflow das `PLAY RECAP` je Host an
+`POST /api/ssh/deploy-result`. Erst damit zeigt die Infrastrukturseite einen
+Server als „Verwaltet“ — vorher steht er als „Ausstehend“, nach einem
+Fehlschlag als „Fehlerhaft“. Fehlen die Secrets, läuft der Deploy trotzdem,
+es erscheint nur eine Warnung.
+
+| Name | Art | Beschreibung |
+|------|-----|--------------|
+| `SSH_API_TOKEN` | Secret | `SSH_API_TOKEN` des produktiven Cockpits — besteht bereits |
+| `SSH_API_TOKEN_TEST` | Secret | `SSH_API_TOKEN` des Test-Cockpits (für `target_environment=development`) |
+| `COCKPIT_API_URL` | Variable, optional | Vorgabe `https://cockpit.babsy.ch` |
+| `COCKPIT_API_URL_TEST` | Variable, optional | Vorgabe `https://cockpit.test.babsy.ch` |
+
 ## 🔧 Schritt-für-Schritt Anleitung
 
 ### 1. Azure AD App Registration erstellen
