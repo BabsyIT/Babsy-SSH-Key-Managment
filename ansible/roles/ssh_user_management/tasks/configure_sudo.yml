@@ -1,16 +1,6 @@
 ---
 # Configure sudo access for user
 
-- name: "{{ user_item.local_user }} | Backup existing sudoers file"
-  ansible.builtin.copy:
-    src: "/etc/sudoers.d/{{ user_item.local_user }}"
-    dest: "{{ backup_dir }}/sudoers_{{ user_item.local_user }}_{{ ansible_date_time.epoch }}"
-    remote_src: true
-    mode: '0600'
-  when: create_backups
-  ignore_errors: true
-  tags: [sudo, backup]
-
 - name: "{{ user_item.local_user }} | Configure full sudo access"
   ansible.builtin.template:
     src: sudoers_full.j2
@@ -44,6 +34,7 @@
   tags: [sudo]
 
 - name: "{{ user_item.local_user }} | Log sudo configuration"
+  changed_when: false
   ansible.builtin.lineinfile:
     path: "{{ log_dir }}/sudo.log"
     line: "{{ ansible_date_time.iso8601 }} - Configured {{ user_item.sudo_access }} sudo access for {{ user_item.local_user }}"

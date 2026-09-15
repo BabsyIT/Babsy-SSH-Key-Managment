@@ -12,8 +12,7 @@ user_home_base: /home
 # GitHub settings
 github_keys_base_url: "https://github.com"
 
-# Backup settings
-create_backups: true
+# Nur noch zum Aufräumen alter Sicherungen — die Rolle legt keine mehr an
 backup_dir: /var/backups/ssh-user-management
 
 # Logging

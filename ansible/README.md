@@ -126,7 +126,6 @@ ansible-lint playbooks/deploy-users.yml
 user_mapping_file: "{{ playbook_dir }}/../../config/user-mapping.json"
 default_shell: /bin/bash
 github_keys_base_url: "https://github.com"
-create_backups: true
 enable_logging: true
 ```
 
@@ -202,7 +201,7 @@ ansible-playbook -i inventory/hosts.yml playbooks/deploy-users.yml --check --dif
 ## 🔒 Best Practices
 
 1. **Immer mit `--check` testen** vor Production-Deployment
-2. **Backups aktiviert lassen** (`create_backups: true`)
+2. **Keine Handarbeit in `~/.ssh/authorized_keys_github`** — die Datei wird bei jedem Lauf vollständig überschrieben; eigene Schlüssel gehören in `~/.ssh/authorized_keys`
 3. **Verbose Logging** bei Problemen (`-vvv`)
 4. **Inventory im Git** - Versionierung der Host-Konfiguration
 5. **SSH Keys rotieren** - Regelmäßig neue Deploy-Keys
