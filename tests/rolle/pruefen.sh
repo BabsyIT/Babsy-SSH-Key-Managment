@@ -32,7 +32,9 @@ id sshtest-b >/dev/null 2>&1 && fehler "sshtest-b ist nur für einen anderen Hos
 sudo test -s "$HOME_BASIS/sshtest-a/.ssh/authorized_keys_github" || fehler "Schlüsseldatei fehlt"
 sudo grep -q "ssh-" "$HOME_BASIS/sshtest-a/.ssh/authorized_keys_github" || fehler "keine Schlüssel von GitHub in der Datei"
 sudo test -f /etc/sudoers.d/sshtest-a || fehler "sudoers-Datei fehlt"
-sudo visudo -c >/dev/null || fehler "sudoers ungültig"
+# Nur die Datei der Rolle: `visudo -c` prüft alles, auch was der Runner mitbringt.
+sudo visudo -cf /etc/sudoers.d/sshtest-a || fehler "sudoers-Datei der Rolle ungültig"
+sudo visudo -c || echo "::warning::visudo -c meldet Probleme ausserhalb der Rolle (Runner)"
 sudo grep -qx sshtest-a /var/lib/ssh-user-management/managed-users || fehler "nicht in managed-users"
 
 echo "== Lauf 2: nichts ausser der Schlüsseldatei darf sich ändern"
