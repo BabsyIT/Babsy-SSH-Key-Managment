@@ -190,11 +190,100 @@ jobs:
             LIMIT_FLAG="--limit ${TARGET}"
           fi
 
+          # Die Ausgabe wird mitgeschrieben, damit der naechste Schritt das
+          # PLAY RECAP je Host ans Cockpit melden kann. pipefail ist Pflicht:
+          # Ohne ihn liefert die Pipe den Status von tee, und ein
+          # fehlgeschlagener Lauf stuende hier als Erfolg.
+          set -o pipefail
           ansible-playbook \
             -i inventory/hosts.yml \
             ${LIMIT_FLAG} \
             -v \
-            playbooks/deploy-users.yml
+            playbooks/deploy-users.yml 2>&1 | tee "$RUNNER_TEMP/ansible-run.log"
+
+      - name: Ergebnis an das Cockpit melden
+        # Auch nach einem Fehlschlag: Gerade dann soll das Cockpit den Host
+        # nicht weiter als verwaltet zeigen. Trockenlaeufe nicht — ein --check
+        # belegt nicht, dass Benutzer tatsaechlich angelegt wurden.
+        if: always() && github.event.inputs.dry_run != 'true'
+        env:
+          COCKPIT_URL_PROD: ${{ secrets.COCKPIT_API_URL }}
+          COCKPIT_TOKEN_PROD: ${{ secrets.COCKPIT_SSH_API_TOKEN }}
+          COCKPIT_URL_TEST: ${{ secrets.COCKPIT_API_URL_TEST }}
+          COCKPIT_TOKEN_TEST: ${{ secrets.COCKPIT_SSH_API_TOKEN_TEST }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TARGET="${{ github.event.inputs.target_environment || 'all' }}"
+
+          # Dieselbe Trennung wie beim Verzeichnis: Entwicklungslaeufe meldet
+          # das Test-Cockpit, alle anderen das produktive.
+          if [ "$TARGET" = "development" ]; then
+            URL="$COCKPIT_URL_TEST"; TOKEN="$COCKPIT_TOKEN_TEST"
+          else
+            URL="$COCKPIT_URL_PROD"; TOKEN="$COCKPIT_TOKEN_PROD"
+          fi
+
+          if [ -z "$URL" ] || [ -z "$TOKEN" ]; then
+            echo "::warning::Cockpit-URL oder -Token fehlt — Ergebnis nicht gemeldet. Die Infrastrukturseite zeigt die Hosts dann als ausstehend."
+            exit 0
+          fi
+
+          LOG="$RUNNER_TEMP/ansible-run.log"
+          if [ ! -s "$LOG" ]; then
+            echo "::warning::Keine Ansible-Ausgabe vorhanden — der Lauf brach vor dem Playbook ab. Nichts zu melden."
+            exit 0
+          fi
+
+          python3 - "$LOG" "$RUN_URL" > "$RUNNER_TEMP/deploy-result.json" <<'PY'
+          import json, re, sys
+
+          log_path, run_url = sys.argv[1], sys.argv[2]
+          zeile = re.compile(
+              r'^(?P<host>\S+)\s*:\s*ok=(?P<ok>\d+)\s+changed=(?P<changed>\d+)\s+'
+              r'unreachable=(?P<unreachable>\d+)\s+failed=(?P<failed>\d+)'
+          )
+
+          hosts = {}
+          im_recap = False
+          with open(log_path, encoding='utf-8', errors='replace') as f:
+              for roh in f:
+                  text = roh.rstrip('\n')
+                  if text.startswith('PLAY RECAP'):
+                      im_recap = True
+                      continue
+                  if not im_recap:
+                      continue
+                  m = zeile.match(text)
+                  if m:
+                      # Mehrere Plays: der letzte Stand je Host zaehlt.
+                      hosts[m['host']] = {
+                          'hostname': m['host'],
+                          'ok': int(m['ok']),
+                          'changed': int(m['changed']),
+                          'unreachable': int(m['unreachable']),
+                          'failed': int(m['failed']),
+                      }
+
+          json.dump({'runUrl': run_url, 'dryRun': False, 'hosts': list(hosts.values())}, sys.stdout)
+          PY
+
+          ANZAHL=$(jq '.hosts | length' "$RUNNER_TEMP/deploy-result.json")
+          if [ "$ANZAHL" = "0" ]; then
+            echo "::warning::Kein PLAY RECAP gefunden — nichts zu melden."
+            exit 0
+          fi
+          jq -r '.hosts[] | "  \(.hostname): unreachable=\(.unreachable) failed=\(.failed)"' "$RUNNER_TEMP/deploy-result.json"
+
+          # Ein Fehler beim Melden darf den Deploy nicht rot faerben — die
+          # Benutzer sind dann trotzdem ausgerollt. Er soll aber auffallen.
+          if ! curl -fsS --max-time 30 \
+                -X POST "${URL%/}/api/ssh/deploy-result" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                --data @"$RUNNER_TEMP/deploy-result.json"; then
+            echo "::warning::Ergebnis konnte nicht an das Cockpit gemeldet werden."
+          fi
+          echo
 
       - name: Generate deployment report
         if: always()
