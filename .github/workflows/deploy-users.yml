@@ -86,52 +86,68 @@ jobs:
             exit 1
           fi
 
-      - name: Restore Ansible Inventory from Secret
-        # Die Entwicklungsumgebung hat ein eigenes Verzeichnis. Das Test-Cockpit
-        # schreibt ausschliesslich dieses; produktive Server stehen gar nicht
-        # darin. Ohne die Trennung hinge alles am richtig gesetzten Parameter.
+      - name: Inventar und Benutzerliste vom Cockpit holen
+        # Live statt aus Secrets. Das Cockpit ging davon aus, der Lauf hole
+        # beides frisch (ssh-deploy.service.ts), und schrieb die Benutzerliste
+        # bei Rechteänderungen deshalb gar nicht mehr. Der Lauf las aber nur
+        # die Secrets — USER_MAPPING_JSON stand am 15.09.2026 auf dem Stand vom
+        # 19.02.2026, und keine Rechteänderung seither kam auf einem Server an.
+        #
+        # Bewusst ohne Rückfall auf die Secrets: Die Rolle entzieht Zugänge,
+        # die nicht in der Liste stehen. Mit einer veralteten Liste löschte sie
+        # alle, die seither dazugekommen sind. Ist das Cockpit nicht
+        # erreichbar, bricht der Lauf ab — ein ausgefallener Lauf ist
+        # harmloser als ein falscher.
+        #
+        # Entwicklungsläufe fragen das Test-Cockpit, alle anderen das
+        # produktive; jede Instanz liefert nur die Hosts ihrer Umgebung.
         env:
-          ANSIBLE_INVENTORY_CONTENT: ${{ secrets.ANSIBLE_INVENTORY }}
-          ANSIBLE_INVENTORY_TEST: ${{ secrets.ANSIBLE_INVENTORY_TEST }}
+          COCKPIT_URL_PROD: ${{ vars.COCKPIT_API_URL || 'https://cockpit.babsy.ch' }}
+          COCKPIT_URL_TEST: ${{ vars.COCKPIT_API_URL_TEST || 'https://cockpit.test.babsy.ch' }}
+          COCKPIT_TOKEN_PROD: ${{ secrets.SSH_API_TOKEN }}
+          COCKPIT_TOKEN_TEST: ${{ secrets.SSH_API_TOKEN_TEST }}
         run: |
-          mkdir -p ansible/inventory
           TARGET="${{ github.event.inputs.target_environment || 'production' }}"
-
           if [ "$TARGET" = "development" ]; then
-            if [ -z "$ANSIBLE_INVENTORY_TEST" ]; then
-              echo "::error::ANSIBLE_INVENTORY_TEST ist leer — Lauf abgebrochen."
-              echo "Ein leeres Verzeichnis liefe stillschweigend ins Leere."
-              exit 1
-            fi
-            printf '%s\n' "$ANSIBLE_INVENTORY_TEST" > ansible/inventory/hosts.yml
-            echo "✓ Ansible inventory restored (Entwicklung)"
+            URL="$COCKPIT_URL_TEST"; TOKEN="$COCKPIT_TOKEN_TEST"; NAME="SSH_API_TOKEN_TEST"
           else
-            printf '%s\n' "$ANSIBLE_INVENTORY_CONTENT" > ansible/inventory/hosts.yml
-            echo "✓ Ansible inventory restored (Produktion)"
+            URL="$COCKPIT_URL_PROD"; TOKEN="$COCKPIT_TOKEN_PROD"; NAME="SSH_API_TOKEN"
           fi
 
-      - name: Restore user-mapping.json from Secret
-        # Dieselbe Trennung wie beim Verzeichnis: Das Test-Cockpit beschreibt
-        # USER_MAPPING_JSON_TEST und lässt die produktive Liste unberührt.
-        env:
-          USER_MAPPING_CONTENT: ${{ secrets.USER_MAPPING_JSON }}
-          USER_MAPPING_TEST: ${{ secrets.USER_MAPPING_JSON_TEST }}
-        run: |
-          mkdir -p config
-          TARGET="${{ github.event.inputs.target_environment || 'production' }}"
-
-          if [ "$TARGET" = "development" ]; then
-            if [ -z "$USER_MAPPING_TEST" ]; then
-              echo "::error::USER_MAPPING_JSON_TEST ist leer — Lauf abgebrochen."
-              echo "Eine leere Benutzerliste entzöge auf den Zielservern jeden Zugang."
-              exit 1
-            fi
-            printf '%s\n' "$USER_MAPPING_TEST" > config/user-mapping.json
-            echo "✓ User mapping restored (Entwicklung)"
-          else
-            printf '%s\n' "$USER_MAPPING_CONTENT" > config/user-mapping.json
-            echo "✓ User mapping restored (Produktion)"
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Secret $NAME fehlt — ohne ihn gibt das Cockpit ($URL) weder Inventar noch Benutzerliste heraus."
+            exit 1
           fi
+
+          mkdir -p ansible/inventory config
+          holen() {
+            curl -fsS --max-time 30 --retry 2 --retry-delay 5 \
+              -H "Authorization: Bearer $TOKEN" "${URL%/}/api/ssh/$1" -o "$2"
+          }
+
+          if ! holen inventory ansible/inventory/hosts.yml; then
+            echo "::error::Inventar von $URL nicht abrufbar — Lauf abgebrochen."
+            exit 1
+          fi
+          if ! holen user-mapping config/user-mapping.json; then
+            echo "::error::Benutzerliste von $URL nicht abrufbar — Lauf abgebrochen."
+            exit 1
+          fi
+
+          # Plausibel? Ein leeres Inventar liefe ins Leere, eine leere
+          # Benutzerliste entzöge jeden Zugang (die Rolle prüft das zusätzlich).
+          if ! grep -q '^all:' ansible/inventory/hosts.yml; then
+            echo "::error::Antwort von /api/ssh/inventory ist kein Ansible-Inventar."
+            exit 1
+          fi
+          if ! jq -e '.users | type == "array" and length > 0' config/user-mapping.json > /dev/null; then
+            echo "::error::Benutzerliste vom Cockpit ist leer oder ungültig — Lauf abgebrochen."
+            exit 1
+          fi
+
+          echo "✓ Inventar und Benutzerliste von $URL"
+          echo "  Hosts: $(grep -cE '^ {8}[a-zA-Z0-9.-]+:$' ansible/inventory/hosts.yml || true)"
+          echo "  Benutzer: $(jq '.users | length' config/user-mapping.json), entzogen: $(jq '.revoked_users // [] | length' config/user-mapping.json)"
 
       - name: Verify user-mapping.json exists
         run: |

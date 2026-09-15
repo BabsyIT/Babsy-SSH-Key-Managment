@@ -1,0 +1,137 @@
+---
+# Zugänge entziehen, die nicht mehr in der Benutzerliste stehen.
+#
+# Bis 09/2026 legte die Rolle Benutzer nur an. Wer aus der Liste fiel, behielt
+# Konto, sudo und Schlüssel — obwohl das Cockpit beim Entzug ankündigt, das
+# Konto werde auf allen Hosts entfernt.
+#
+# Zwei Stufen:
+#
+#   1. Konten, die je in der Benutzerliste standen (verzeichnet in
+#      managed-users), werden vollständig gelöscht — samt Home. Dazu gehören
+#      auch übernommene Konten, die es vor der Automatik schon gab.
+#   2. Konten, die nie in der Liste standen, bleiben bestehen. Entzogen wird
+#      nur, was die Rolle ihnen gegeben hat: authorized_keys_github und die von
+#      ihr geschriebene sudoers-Datei. Eigene ~/.ssh/authorized_keys bleiben.
+#      Das betrifft Altbestände aus der Zeit vor managed-users.
+#
+# Geschützte Konten (root, ansible, Systemkonten, das Anmeldekonto dieses
+# Laufs) werden in keiner Stufe angefasst.
+
+- name: Load accounts created by this role
+  ansible.builtin.slurp:
+    src: "{{ managed_users_file }}"
+  register: managed_users_raw
+  failed_when: false
+  tags: [users, remove]
+
+- name: Work out which accounts to remove or strip
+  ansible.builtin.set_fact:
+    gewuenschte_konten: "{{ benutzer_hier | map(attribute='local_user') | list }}"
+    # Im Cockpit deaktivierte Personen. Steht jemand zugleich aktiv in der
+    # Liste, gewinnt die aktive Zuordnung.
+    entzogene_konten: >-
+      {{ (user_config.revoked_users | default([]))
+         | select('match', '^[a-z_][a-z0-9_-]{0,31}$') | list
+         | difference(user_config.users | map(attribute='local_user') | list) }}
+    geschuetzte_konten: "{{ protected_users + [ansible_user | default('')] }}"
+    # splitlines statt split: Im YAML-Block kam '\n' nicht als Zeilenumbruch
+    # an, und die ganze Datei wurde zu einem einzigen "Kontonamen". Nur
+    # gültige Unix-Namen kommen durch — was hier landet, wird gelöscht.
+    verwaltete_konten: "{{ (managed_users_raw.content | default('') | b64decode).splitlines() | map('trim') | select('match', '^[a-z_][a-z0-9_-]{0,31}$') | list }}"
+
+  tags: [users, remove]
+
+# --- Stufe 1: verwaltete Konten löschen -------------------------------
+
+- name: Remove sudo access of accounts no longer listed (managed)
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ item }}"
+    state: absent
+  loop: "{{ verwaltete_konten | difference(gewuenschte_konten) | difference(geschuetzte_konten) }}"
+  tags: [users, remove]
+
+- name: Delete accounts no longer listed (managed)
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+    remove: true
+  loop: "{{ verwaltete_konten | difference(gewuenschte_konten) | difference(geschuetzte_konten) }}"
+  tags: [users, remove]
+
+- name: Forget deleted accounts
+  ansible.builtin.lineinfile:
+    path: "{{ managed_users_file }}"
+    regexp: "^{{ item | regex_escape }}$"
+    state: absent
+  loop: "{{ verwaltete_konten | difference(gewuenschte_konten) | difference(geschuetzte_konten) }}"
+  tags: [users, remove]
+
+# --- Stufe 2: bei bestehenden Konten nur den Zugang der Rolle entziehen -----
+
+- name: Find key files written by this role
+  ansible.builtin.find:
+    paths: "{{ user_home_base }}"
+    patterns: authorized_keys_github
+    recurse: true
+    depth: 3
+    hidden: true
+  register: schluesseldateien
+  tags: [users, remove]
+
+- name: Remove keys of accounts no longer listed
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ schluesseldateien.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  # Besitzer aus dem Pfad /home/<konto>/.ssh/authorized_keys_github
+  when:
+    - (item.path | dirname | dirname | basename) not in gewuenschte_konten
+    - (item.path | dirname | dirname | basename) not in geschuetzte_konten
+  tags: [users, remove]
+
+# Nur Dateien mit der Kopfzeile der eigenen Vorlagen: Andere Einträge in
+# sudoers.d (etwa der GitHub-Runner auf docker1.test) gehören nicht dieser Rolle.
+- name: Find sudoers files written by this role
+  ansible.builtin.find:
+    paths: /etc/sudoers.d
+    contains: '^# Sudo configuration for '
+  register: sudoers_dateien
+  tags: [users, remove]
+
+- name: Remove sudo access of accounts no longer listed
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ sudoers_dateien.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when:
+    - (item.path | basename) not in gewuenschte_konten
+    - (item.path | basename) not in geschuetzte_konten
+  tags: [users, remove]
+
+# --- Deaktivierte Personen, deren Konto nie verwaltet war ------------------
+#
+# Stufe 1 löscht verwaltete Konten ohnehin. Ein im Cockpit deaktiviertes Konto,
+# das nie in managed-users stand, bleibt bestehen — die Rolle weiss nicht, ob
+# es jemand anderem gehört. Sie sperrt es aber: Ein abgelaufenes Konto kommt
+# über SSH nicht mehr herein, auch nicht mit eigenen Schlüsseln in
+# ~/.ssh/authorized_keys, die Stufe 2 bewusst stehen lässt.
+- name: Read all local accounts
+  ansible.builtin.getent:
+    database: passwd
+  register: alle_konten
+  tags: [users, remove]
+
+- name: Lock deactivated accounts that were never managed
+  ansible.builtin.user:
+    name: "{{ item }}"
+    expires: 1
+    shell: /usr/sbin/nologin
+  loop: >-
+    {{ entzogene_konten | difference(verwaltete_konten) | difference(geschuetzte_konten)
+       | intersect(alle_konten.ansible_facts.getent_passwd.keys() | list) }}
+  tags: [users, remove]

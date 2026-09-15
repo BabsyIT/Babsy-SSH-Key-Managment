@@ -15,6 +15,33 @@ github_keys_base_url: "https://github.com"
 # Nur noch zum Aufräumen alter Sicherungen — die Rolle legt keine mehr an
 backup_dir: /var/backups/ssh-user-management
 
+# Konten, die je in der Benutzerliste standen — nur die löscht die Rolle beim Entzug.
+# Derselbe Pfad, den die Cloud-Config des Cockpits anlegt.
+managed_users_file: /var/lib/ssh-user-management/managed-users
+
+# Nie anfassen. Entspricht RESERVED_LOCAL_USERS im Cockpit; das Anmeldekonto
+# des Laufs kommt zur Laufzeit dazu.
+protected_users:
+  - root
+  - ansible
+  - daemon
+  - bin
+  - sys
+  - sync
+  - games
+  - man
+  - mail
+  - news
+  - proxy
+  - www-data
+  - backup
+  - list
+  - irc
+  - nobody
+  - sshd
+  - systemd-network
+  - systemd-resolve
+
 # Logging
 enable_logging: true
 log_dir: /var/log/ssh-user-management

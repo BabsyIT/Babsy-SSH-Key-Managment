@@ -7,6 +7,10 @@
     return_content: true
     status_code: [200, 404]
   register: github_keys_response
+  # Nur lesend — muss auch im Trockenlauf (--check) wirklich abrufen. Sonst
+  # übersprang Ansible den Abruf, die folgenden Aufgaben fanden keine Antwort,
+  # und jeder Trockenlauf brach ab, bevor er etwas zeigen konnte.
+  check_mode: false
   tags: [ssh_keys]
 
 - name: "{{ user_item.local_user }} | Debug GitHub keys response"
