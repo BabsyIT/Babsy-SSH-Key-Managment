@@ -93,6 +93,16 @@
     mode: '0755'
   tags: [setup]
 
+# Das Cockpit vergibt Gruppen wie `ssh-users`, die es auf einem frischen Server
+# nicht gibt. `user … groups:` legt keine an und bricht ab — der erste Lauf mit
+# der aktuellen Benutzerliste scheiterte am 15.09.2026 genau daran.
+- name: Ensure groups of listed users exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ benutzer_hier | map(attribute='groups') | select('defined') | flatten | unique | list }}"
+  tags: [users, groups]
+
 - name: Process each user
   ansible.builtin.include_tasks: manage_user.yml
   loop: "{{ benutzer_hier }}"
